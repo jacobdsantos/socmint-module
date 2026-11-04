@@ -72,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-posts", type=int, default=None)
     run.add_argument("--offline-analysis", action="store_true",
                      help="skip the embedding model and use lexical grouping")
+    run.add_argument("--no-news", action="store_true",
+                     help="skip Google News; collect social sources only")
+    run.add_argument("--gdelt", action="store_true",
+                     help="also query GDELT (IP rate-limited; off by default)")
 
     demo = sub.add_parser(
         "demo",
@@ -200,6 +204,17 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
 
         config = replace(config, budgets=replace(config.budgets, max_posts_per_run=args.max_posts))
+    if args.no_news or args.gdelt:
+        from dataclasses import replace
+
+        config = replace(
+            config,
+            budgets=replace(
+                config.budgets,
+                enable_google_news=not args.no_news,
+                enable_gdelt=args.gdelt,
+            ),
+        )
     if args.offline_analysis:
         from dataclasses import replace
 

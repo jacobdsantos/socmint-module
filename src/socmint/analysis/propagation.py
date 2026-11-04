@@ -18,6 +18,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from ..models import (
+    NEWS_PLATFORMS,
     EarliestObserved,
     NarrativeCandidate,
     Post,
@@ -152,13 +153,18 @@ def spread_timeline(edges: list[PropagationEdge], posts_by_id: dict[str, Post]) 
         times = [p.published_at for p in posts if p.published_at]
         if not times:
             continue
+        # A news record has a publisher domain, not an account. Counting it as
+        # one would report "5 accounts" for a story carried by two people and
+        # three outlets.
+        social = [p for p in posts if p.platform not in NEWS_PLATFORMS]
         rows.append(
             {
                 "narrative_id": narrative_id,
                 "first_observed": min(times),
                 "last_observed": max(times),
                 "platforms": sorted({str(p.platform) for p in posts}),
-                "accounts": len({p.author_id or p.author_name for p in posts}),
+                "accounts": len({p.author_id or p.author_name for p in social}),
+                "news_records": len(posts) - len(social),
                 "linked_posts": len({p.identity for p in posts}),
             }
         )

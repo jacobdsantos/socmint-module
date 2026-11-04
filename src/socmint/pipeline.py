@@ -19,7 +19,7 @@ from .analysis import indicators as indicator_mod
 from .analysis import narratives as narr_mod
 from .analysis import propagation as prop_mod
 from .analysis import threat as threat_mod
-from .collection import discovery, telegram, youtube
+from .collection import discovery, gdelt, mastodon, news_rss, telegram, youtube
 from .models import (
     TLP,
     AnalysisBundle,
@@ -78,7 +78,13 @@ def collect(
     all_posts: list[Post] = []
     reports: list[PlatformReport] = []
 
-    for platform in (Platform.YOUTUBE, Platform.TELEGRAM):
+    platforms = [Platform.YOUTUBE, Platform.TELEGRAM, Platform.MASTODON]
+    if config.budgets.enable_google_news:
+        platforms.append(Platform.GOOGLE_NEWS)
+    if config.budgets.enable_gdelt:
+        platforms.append(Platform.GDELT)
+
+    for platform in platforms:
         report = PlatformReport(platform=platform)
         platform_posts: list[Post] = []
 
@@ -164,6 +170,56 @@ def collect(
                 StageStatus.OK if platform_posts else
                 (StageStatus.PARTIAL if report.sources_found else StageStatus.EMPTY)
             )
+
+        elif platform is Platform.MASTODON:
+            fetch = mastodon.collect(
+                run.topic,
+                aliases=run.aliases,
+                window_start=run.window.start,
+                window_end=run.window.end,
+                budgets=config.budgets,
+            )
+            run.queries.extend(fetch.queries)
+            report.notes.extend(fetch.notes)
+            platform_posts.extend(fetch.posts)
+            report.sources_found = len(
+                {p.author_id for p in fetch.posts if p.author_id}
+            )
+            report.discovery = fetch.status
+            report.retrieval = fetch.status
+            report.truncated = fetch.truncated
+
+        elif platform is Platform.GOOGLE_NEWS:
+            fetch = news_rss.collect(
+                run.topic,
+                aliases=run.aliases,
+                window_start=run.window.start,
+                window_end=run.window.end,
+                budgets=config.budgets,
+            )
+            run.queries.extend(fetch.queries)
+            report.notes.extend(fetch.notes)
+            platform_posts.extend(fetch.posts)
+            report.sources_found = len({p.author_id for p in fetch.posts if p.author_id})
+            report.discovery = fetch.status
+            report.retrieval = fetch.status
+            report.truncated = fetch.truncated
+
+        elif platform is Platform.GDELT:
+            fetch = gdelt.collect(
+                run.topic,
+                aliases=run.aliases,
+                window_start=run.window.start,
+                window_end=run.window.end,
+                budgets=config.budgets,
+            )
+            run.queries.extend(fetch.queries)
+            report.notes.extend(fetch.notes)
+            platform_posts.extend(fetch.posts)
+            report.sources_found = len({p.author_id for p in fetch.posts if p.author_id})
+            report.discovery = fetch.status
+            report.retrieval = fetch.status
+            report.truncated = fetch.truncated
 
         _enrich_language(platform_posts)
         report.posts_retrieved = len(platform_posts)

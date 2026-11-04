@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**118 tests, all passing, 86% statement coverage** across `src/socmint`
+**161 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -259,6 +259,43 @@ by looking at output that was wrong in a way the tests did not catch.
     `No technical indicators were extracted; 88 cited reference(s) were
     classified as references and excluded from the indicator set`.
 
+### Adding sources
+
+22. **Federated copies of one Mastodon post counted as four posts.** A live
+    "typhoon Philippines" collection returned the same status once per instance.
+    The cause is that Mastodon's `id` is instance-local, so the same federated
+    status has a different `id` on every instance that relays it. Fixed by
+    keying identity on the canonical `uri`. Live result went from 4 posts (2
+    unique) to 2.
+
+23. **GDELT's 429 needed a backoff longer than the retry budget.** The published
+    limit is one request every five seconds per IP with no `Retry-After`; a
+    2-second backoff burned an attempt and still returned 429. The floor is now
+    six seconds and grows per attempt. This did not save GDELT on a shared
+    corporate NAT — every call still returned 429 after a minute idle, while
+    Google News answered immediately from the same machine — which is why GDELT
+    ships disabled by default.
+
+24. **Google News returns zero items for a quoted phrase combined with a date
+    operator.** `"typhoon Philippines" when:11d` and `"typhoon Philippines"
+    after:... before:...` both returned an empty feed, while the unquoted forms
+    returned 30–50 items. The failure is silent: it looks exactly like "no
+    coverage". Fixed by building the query unquoted and letting the exact window
+    be applied locally. Because an unquoted query is a loose AND, relevance is
+    then decided per headline — on the live run that cut 49 retrieved articles
+    to 7 that actually contain both topic words.
+
+25. **Adding platforms silently turned the test suite into a live-network
+    client.** `pipeline.collect` runs every enabled platform, and two tests in
+    `test_cli.py` mocked only YouTube and Telegram. With Mastodon and Google
+    News enabled by default, those tests began issuing real requests: the suite
+    went from about five minutes to more than fifteen, and it would have failed
+    on a machine without internet. Fixed with an autouse fixture in
+    `conftest.py` that replaces the fetch entry point in every collector with
+    one that raises, so a live call fails loudly instead of quietly slowing the
+    suite. A test that wants a response still patches it in its own body, which
+    runs after the fixture and wins.
+
 ---
 
 ## 6. False positives and false negatives observed
@@ -295,7 +332,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 118 tests
+.venv/bin/pytest -q                                   # 161 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports

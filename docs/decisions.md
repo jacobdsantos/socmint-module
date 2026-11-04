@@ -5,36 +5,47 @@ reason. Where the decision was forced by access rather than preference, I say so
 
 ---
 
-## 1. Scope: two platforms, not seven
+## 1. Scope: four sources, three access models
 
-**Decision.** Collect from YouTube and Telegram. Document the other five as
-out of scope with the specific access barrier for each.
+**Decision.** Collect from YouTube, Telegram, Mastodon and Google News. Keep a
+GDELT adapter but leave it disabled by default. Document the remaining platforms
+as out of scope with the specific access barrier for each.
 
-**Rejected.** A shallow connector for all seven.
+**Rejected.** A shallow connector for all seven. Also rejected: paying for X
+access before the free paths were exhausted.
 
-**Why.** The brief lists seven platforms. Six of them cannot be collected
-broadly without either a paid tier, an allowlisted research account, or
-authenticated scraping:
+**Why.** The brief lists seven social platforms. Five cannot be collected
+broadly without a paid tier, an allowlisted research account, or authenticated
+scraping:
 
 | Platform | Barrier | Evidence |
 |---|---|---|
-| X | Paid API tiers; free tier cannot search | `docs.x.com` pricing page |
+| X | No free read tier. The API is now pay-per-usage ($0.005/post read); Nitter is dead as a class | `docs.x.com` pricing, live probe 2026-11-04 |
 | TikTok | Research API requires institutional eligibility; no anonymous search | developers.tiktok.com |
 | Instagram | Graph API covers owned accounts only; no topic search | Meta docs |
 | Facebook | Content Library requires approved research access | Meta docs |
 | Snapchat | Public Profile API is allowlisted; no discovery surface | Snap developer docs |
-| YouTube | **Works** — anonymous `ytsearch` + metadata via yt-dlp | Day-1 gate |
-| Telegram | **Works** — public `t.me/s/` preview, no account | Day-1 gate |
+| YouTube | **Works** — anonymous `ytsearch` + metadata via yt-dlp | Live |
+| Telegram | **Works** — public `t.me/s/` preview, no account | Live |
+| Mastodon | **Works** — public tag timelines, no account | Live |
+| Google News | **Works** — public RSS search, no key | Live |
 
-A seventh shallow connector would have produced seven platforms' worth of
-failure modes and two platforms' worth of evidence. Two platforms that genuinely
-work, with honest coverage reporting, is the more defensible deliverable. If an
-evaluator supplies credentials for another platform, the adapter interface is
-one file.
+**Why a news source at all.** Three social platforms answer "what are people
+saying". None of them answers "is this being reported". Google News adds that
+signal for free, and its records are marked as news so they cannot be mistaken
+for social corroboration (§16).
+
+**Why not X.** Every route was tested from the target network rather than taken
+from documentation: `public.api.bsky.app` is blocked, Reddit's public JSON
+returns 403, RSSHub's public instance now redirects to an account wall, and
+`nitter.net` returns a page with zero timeline items. What remains is metered —
+X's own API at $0.005/post, or a reseller. That is a decision to spend money,
+not a technical one, and it belongs to the person paying.
 
 **Cost of the decision.** No X coverage. X is where a lot of English-language
 disinformation research happens, and its absence is a real gap, not a rounding
-error. It is stated as a gap in every report rather than papered over.
+error. It is stated as a gap in every report rather than papered over. The
+adapter interface is one file, so adding X later is a contained change.
 
 ---
 
@@ -374,3 +385,32 @@ Examples enforced in code:
 This is the single most important design constraint. A SOCMINT tool that guesses
 is worse than one that abstains, because the guess is indistinguishable from the
 finding in the output.
+
+---
+
+## 16. A news article is not a social account
+
+**Decision.** News records carry a platform in `NEWS_PLATFORMS` and are excluded
+from coordination and from account-based corroboration.
+
+**Why it had to be explicit.** Adding a news source is the cheapest way to
+inflate a case. A headline repeating the topic is not a second account carrying
+the claim, and two outlets syndicating one wire story is not coordination. Both
+mistakes make the output look stronger while making it worth less.
+
+**Where the guard lives.**
+
+| Risk | Guard | Asserted by |
+|---|---|---|
+| A press mention upgrades a cluster's information grade | `_information_grade` counts only social members; a news-only cluster grades 6 | `test_news_article_does_not_count_as_a_second_account` |
+| Two outlets running the same wire copy pair as "coordinated" | `detect` filters news before pairing | `test_news_records_cannot_form_a_coordination_group` |
+| A news domain joins a social group's membership | same filter | `test_news_records_do_not_join_a_social_group` |
+
+**What news is good for instead.** Coverage: is the topic being reported, in
+which languages, by how many distinct publishers, over what period. That is a
+different claim from "this narrative is coordinated", and it is reported
+separately rather than blended into the social evidence.
+
+**News records are metadata only.** Headline, publisher domain, publication
+time, permalink. The article body is never fetched, so `evidence_quality` is
+`partial` and no claim is verified from a news record.

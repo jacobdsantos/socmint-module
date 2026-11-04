@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import ipaddress
+import json
 import re
 import socket
 from collections.abc import Callable, Iterable, Mapping
@@ -27,6 +28,15 @@ ALLOWED_HOSTS: frozenset[str] = frozenset(
         "youtu.be",
         "i.ytimg.com",
         "yt3.ggpht.com",
+        # Mastodon instances whose public tag timelines are readable without
+        # an account. Keep in step with Budgets.mastodon_instances.
+        "mastodon.social",
+        "mastodon.online",
+        "fosstodon.org",
+        "mstdn.social",
+        # Free, keyless news indexes.
+        "news.google.com",
+        "api.gdeltproject.org",
     }
 )
 
@@ -117,6 +127,14 @@ class FetchResult:
     text: str
     url: str
     headers: dict[str, str]
+
+    def json(self) -> object:
+        """Decode the body as JSON, raising ``ValueError`` on malformed input.
+
+        Mirrors ``httpx.Response.json`` so callers do not have to know this is a
+        value object rather than a real response.
+        """
+        return json.loads(self.text)
 
 
 def safe_get(

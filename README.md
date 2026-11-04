@@ -54,13 +54,36 @@ Given a topic and a date range, the module:
 
 ## Platforms
 
-| Platform | Access | Status |
-|---|---|---|
-| **YouTube** | `yt-dlp` keyword search + metadata, anonymous | Working |
-| **Telegram** | Public `t.me/s/<channel>` web preview, anonymous | Working |
+| Platform | Kind | Access | Seeding |
+|---|---|---|---|
+| **YouTube** | social | `yt-dlp` keyword search + metadata, anonymous | keyword |
+| **Telegram** | social | Public `t.me/s/<channel>` web preview, anonymous | channel (via web search) |
+| **Mastodon** | social | Public `/api/v1/timelines/tag/`, anonymous | hashtag (derived from topic) |
+| **Google News** | news | Public RSS search, keyless | keyword |
 
-Telegram is **channel-seeded**: channels are discovered via web search, then their
-public preview is read. It is not a global keyword index.
+Three access models, all free: anonymous scraping of public surfaces, a public
+RSS index, and — where the network allows — the GDELT DOC API (off by default;
+see below).
+
+Two of the social sources are **seeded** rather than keyword-indexed. Telegram
+channels are discovered by web search first; Mastodon is read by hashtag. A
+topic with no hashtag yields nothing from Mastodon, which is why cyber topics
+(CVE identifiers, malware names) get little from it while conflict and disaster
+topics do well.
+
+**News is not social.** A Google News record has a publisher domain, not an
+account. It cannot join a coordination group, and a headline that repeats the
+topic is not a second account corroborating a social post. Both rules are
+enforced in `models.NEWS_PLATFORMS` and asserted by tests, because counting a
+press mention as independent support would silently upgrade an information grade.
+
+### Why GDELT is off by default
+
+GDELT's DOC API is free and keyless, and the adapter is included. But it enforces
+one request every five seconds **per IP** with no `Retry-After`, and behind a
+shared corporate NAT that quota is routinely already spent: every call returned
+429 even after a minute idle, while Google News RSS answered immediately from the
+same network. Enable it with `enable_gdelt=True` where the network allows it.
 
 ### Known limitations (disclosed, not hidden)
 
@@ -284,6 +307,9 @@ src/socmint/
     discovery.py   # topic -> candidate channels (DDGS)
     youtube.py     # yt-dlp adapter
     telegram.py    # t.me/s parser + pagination
+    mastodon.py    # public tag timelines, federated dedupe by uri
+    news_rss.py    # Google News RSS search
+    gdelt.py       # GDELT DOC 2.0 (optional, off by default)
   analysis/
     narratives.py  # embeddings, centring, clustering
     coordination.py# episodes, discounting, baseline
@@ -307,7 +333,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 118 offline tests, 86% statement coverage.
+- 161 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.
@@ -352,12 +378,17 @@ No precision/recall figure is claimed. Treat groups as leads.
 1. **Telegram discovery is the weakest link.** Web-search discovery is noisy and
    non-deterministic; the same query returns different channels on different
    calls. Some runs collect little or nothing from Telegram.
-2. **Strict relevance.** A post must contain every significant topic word. This
+2. **Mastodon only works if the topic has a hashtag.** It is tag-seeded, not
+   keyword-indexed, so a CVE identifier or a malware name will usually return
+   nothing. That is a property of the access path, not a bug to fix.
+3. **Strict relevance.** A post must contain every significant topic word. This
    favours precision and misses paraphrases and cross-language mentions.
-3. **No recall estimate.** The module cannot say what fraction of platform
+4. **No recall estimate.** The module cannot say what fraction of platform
    activity it captured.
-4. **Coordination needs volume.** With two accounts and a 15-minute window,
+5. **Coordination needs volume.** With two accounts and a 15-minute window,
    organic coordination is rarely observed.
+6. **No X coverage.** There is no free automated read path left; every remaining
+   route is metered. See `docs/decisions.md` §1.
 
 ---
 

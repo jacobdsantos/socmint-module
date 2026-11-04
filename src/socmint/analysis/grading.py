@@ -22,6 +22,7 @@ import re
 from collections import Counter, defaultdict
 
 from ..models import (
+    NEWS_PLATFORMS,
     AdmiraltyInfo,
     AdmiraltyRating,
     AdmiraltySource,
@@ -113,14 +114,21 @@ def _information_grade(
             continue
         if len(members) > catch_all_limit:
             continue
-        accounts = {account_of[m.identity] for m in members}
-        platforms = {str(m.platform) for m in members}
+        # Corroboration means a second *account* carrying the claim. A news
+        # record has a domain, not an account, and a headline that repeats the
+        # topic is not independent support for a social post about it. Counting
+        # news as an account would let one press mention upgrade a whole cluster.
+        social_members = [m for m in members if m.platform not in NEWS_PLATFORMS]
+        accounts = {account_of[m.identity] for m in social_members}
+        platforms = {str(m.platform) for m in social_members}
 
-        if len(accounts) >= 3 and len(platforms) >= 2:
+        if not accounts:
+            info = AdmiraltyInfo.SIX  # nothing social to judge support from
+        elif len(accounts) >= 3 and len(platforms) >= 2:
             info = AdmiraltyInfo.TWO  # probably true: broad independent-ish support
         elif len(accounts) >= 2:
             info = AdmiraltyInfo.THREE  # possibly true
-        elif len(members) >= 2:
+        elif len(social_members) >= 2:
             info = AdmiraltyInfo.FOUR  # doubtful: single account repeating itself
         else:
             info = AdmiraltyInfo.SIX

@@ -43,6 +43,25 @@ def make_post(
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_live_network(monkeypatch):
+    """Fail fast instead of reaching the internet from a test.
+
+    ``pipeline.collect`` runs every enabled platform, so a test that mocks only
+    the one it cares about would silently make live requests to the others --
+    slow, flaky, and a lie about what the suite covers. This blocks the fetch
+    entry point in each collector module; a test that wants a response patches
+    it in its own body, which runs after this fixture and wins.
+    """
+    from socmint.collection import gdelt, mastodon, news_rss
+
+    def _blocked(*args, **kwargs):
+        raise RuntimeError("live network access is blocked in tests")
+
+    for module in (gdelt, mastodon, news_rss):
+        monkeypatch.setattr(module, "safe_get", _blocked)
+
+
 @pytest.fixture
 def coordinated_pair() -> list[Post]:
     """Two accounts posting near-identical text within minutes, twice."""

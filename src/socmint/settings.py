@@ -25,6 +25,27 @@ class Budgets:
     max_retries: int = 2
     retry_backoff_seconds: float = 2.0
     max_response_bytes: int = 5_000_000
+    # Mastodon is federated, so "the platform" is a set of instances. These are
+    # the large general-purpose ones whose tag timelines are publicly readable.
+    # Instance hosts are also in the URL allowlist; adding one here without
+    # adding it there will fail closed, which is the intended failure mode.
+    mastodon_instances: tuple[str, ...] = (
+        "mastodon.social",
+        "mastodon.online",
+        "fosstodon.org",
+        "mstdn.social",
+    )
+    mastodon_max_tags: int = 4
+    # GDELT DOC 2.0 returns at most 250 articles per query.
+    gdelt_max_records: int = 250
+    gdelt_max_queries: int = 3
+    # GDELT enforces "one request every five seconds" by IP with no Retry-After.
+    # On a shared corporate NAT that quota is already spent by other users, so
+    # it is off by default and switched on where the network allows it.
+    enable_gdelt: bool = False
+    # Google News RSS is free, keyless and reliable from the same network.
+    enable_google_news: bool = True
+    google_news_max_items: int = 100
     user_agent: str = (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"

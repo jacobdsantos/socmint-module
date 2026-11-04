@@ -10,10 +10,18 @@ read before using the tool on anything other than public research.
 |---|---|---|---|
 | YouTube | `yt-dlp` search + metadata extraction | No | Free |
 | Telegram | Public web preview `t.me/s/<channel>` | No | Free |
+| Mastodon | Public tag timeline `/api/v1/timelines/tag/<tag>` | No | Free |
+| Google News | Public RSS search feed | No | Free |
+| GDELT (optional, off) | DOC 2.0 API | No | Free, IP-rate-limited |
 | Discovery | `ddgs` metasearch library | No | Free |
 
 No API keys, subscriptions, proxies, or accounts are required. The multilingual
 embedding model is downloaded once and cached locally.
+
+Nothing in this list is metered, so a test run cannot consume a demo budget.
+That is a deliberate constraint: a source that costs money per call changes what
+"safe to experiment with" means, and the prototype is meant to be safe to
+experiment with.
 
 ## Platform terms — read before operational use
 
@@ -43,6 +51,35 @@ for audited analytics developers.
 **What this means:** unofficial extraction is not an exemption, and an API key is
 not an analytics licence. The module stores metadata and links only — it does not
 download video or audio.
+
+### Mastodon
+
+Mastodon is a federation of independently operated servers, each with its own
+terms. Reading a public tag timeline is an ordinary unauthenticated request, but
+the instance's own rules still apply, and some instances disable public preview
+entirely (the module reports that as `blocked_auth` and moves on).
+
+**What this means:** collecting from four instances is a sample of four
+instances, not a sample of "Mastodon". Any operational use needs the operator's
+own terms checked per instance, not a single global statement.
+
+### Google News
+
+The RSS search endpoint is public and keyless. Google's terms for automated
+access to News content are stricter than the endpoint's accessibility suggests,
+and the returned link is a Google redirect rather than the publisher's URL.
+
+**What this means:** the module stores the headline, publisher domain and
+publication time only. It does not fetch article bodies, and it makes no claim
+about the publisher's editorial standards — the index includes user-generated
+sources alongside established outlets.
+
+### GDELT
+
+Free and keyless, but rate-limited to roughly one request every five seconds per
+IP with no `Retry-After`. Behind a shared corporate NAT that quota is commonly
+already spent by other users, which is why the adapter is disabled by default.
+It is included so a network that does have quota can use it.
 
 ### Other platforms in the original brief
 

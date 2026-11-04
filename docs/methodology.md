@@ -39,6 +39,39 @@ two-step process:
 This is **channel-seeded** retrieval. It cannot enumerate every channel that ever
 discussed a topic, and a channel with the public preview disabled is invisible.
 
+**Mastodon.** Also seeded, and for the same reason: anonymous keyword search
+(`/api/v2/search`) needs a token. The module derives candidate hashtags from the
+topic — the joined form first (`#typhoonphilippines`), then each significant
+word — and reads each instance's public tag timeline, paginating by `max_id`.
+Instances that disable public preview return 401 and are skipped with a note.
+
+Two consequences are stated rather than hidden. A topic with no hashtag yields
+nothing, so cyber topics (CVE identifiers, malware names) get little from this
+source while conflict and disaster topics do well. And four instances is a
+sample of four instances, not of the fediverse.
+
+Federated copies are de-duplicated by the status `uri`, not its instance-local
+`id`: the same post carries a different `id` on every instance that relays it,
+so keying on `id` returns one post four times.
+
+**Google News.** A single keyless RSS query, phrase-quoted with aliases OR'd.
+The feed is reverse-chronological and capped near 100 items, so the request asks
+for the whole lookback window and the exact window is applied locally
+afterwards.
+
+**GDELT.** A DOC 2.0 `artlist` query bounded by `startdatetime`/`enddatetime`.
+Included but **disabled by default**: it allows roughly one request every five
+seconds per IP with no `Retry-After`, and behind a shared NAT that quota is
+usually already spent. Enable it where the network allows.
+
+### News records are metadata only
+
+Google News and GDELT records carry a headline, a publisher domain, a
+publication time and a permalink. The article body is never fetched, so their
+`evidence_quality` is `partial` and no claim is verified from them. They are
+also excluded from coordination and from account-based corroboration — see
+`docs/decisions.md` §16.
+
 ### Why relevance is decided at post level
 
 A discovered channel can be topically adjacent while most of its traffic is

@@ -42,9 +42,11 @@ the live path worked.
 > them into narratives, looks for accounts behaving in lockstep, extracts
 > technical indicators, and produces a case assessment you can hand to an analyst.
 >
-> It runs anonymously — no accounts, no API keys. Two platforms actually work:
-> YouTube and Telegram. The other five from the brief are documented as out of
-> scope with the specific access barrier for each, and I'll show you that table."
+> It runs anonymously — no accounts, no API keys, nothing metered. Three social
+> sources work — YouTube, Telegram and Mastodon — plus Google News for the
+> "is anyone reporting this" question. The rest of the brief's platforms are
+> documented as out of scope with the specific access barrier for each, and I'll
+> show you that table."
 
 Show `docs/access-and-limitations.md` for 15 seconds. Do not dwell.
 
@@ -288,12 +290,26 @@ Then:
 
 ## Likely questions, with answers
 
-**"Why only two platforms?"**
-Access, not effort. X, TikTok, Instagram, Facebook and Snapchat all require paid
-tiers, institutional research eligibility, or allowlisted access. I can show you
-the specific barrier for each. Two platforms that genuinely work, with honest
-coverage reporting, beats seven that fail differently. The adapter interface is
-one file if you hand me credentials.
+**"Why not X?"**
+Because there is no free automated read path left, and I tested that rather than
+assuming it. X's API is pay-per-usage at $0.005 per post read. Nitter is dead —
+the instance I probed returned a page with zero timeline items. Reddit's public
+JSON returns 403 unauthenticated. The alternatives are metered, and choosing to
+spend money is a decision for the person paying, not a technical workaround. The
+adapter interface is one file, so it is a contained change if that decision
+changes.
+
+**"Why Mastodon and not something bigger?"**
+Mastodon's public tag timelines need no account, which is the same constraint
+that made YouTube and Telegram viable. The cost is that it is hashtag-seeded: it
+will find `#philippinestyphoon` and will not find `php2shell`. I show that
+limitation rather than hide it.
+
+**"What's the news source for?"**
+A different question. The social sources say what people are saying; Google News
+says whether anyone is reporting it. Those records are marked as news and kept
+out of coordination and out of corroboration, because a press mention is not a
+second account.
 
 **"How do you know your coordination detector is right?"**
 I don't, on live data — there's no ground truth. What I can show is that it fires

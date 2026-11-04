@@ -23,7 +23,13 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import numpy as np
 
-from ..models import CoordinationEpisode, CoordinationGroup, CoordinationSignal, Post
+from ..models import (
+    NEWS_PLATFORMS,
+    CoordinationEpisode,
+    CoordinationGroup,
+    CoordinationSignal,
+    Post,
+)
 from ..settings import AnalysisSettings
 from ..text import content_tokens, jaccard, normalise
 
@@ -280,7 +286,11 @@ def detect(
 ) -> CoordinationResult:
     """Find account groups with repeated, time-aligned shared-content evidence."""
     result = CoordinationResult()
-    usable = [p for p in posts if p.has_timestamp and _features(p)]
+    # News records have no posting account and no posting behaviour, so they can
+    # never evidence coordination between accounts. Their "author" is a domain,
+    # which would otherwise be treated as an account and paired.
+    social = [p for p in posts if p.platform not in NEWS_PLATFORMS]
+    usable = [p for p in social if p.has_timestamp and _features(p)]
     if len({_account_of(p) for p in usable}) < 2:
         result.notes.append(
             "fewer than two accounts with timestamped, feature-bearing posts; "

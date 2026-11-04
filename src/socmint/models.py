@@ -21,6 +21,19 @@ def utcnow() -> datetime:
 class Platform(StrEnum):
     YOUTUBE = "youtube"
     TELEGRAM = "telegram"
+    MASTODON = "mastodon"
+    GOOGLE_NEWS = "google_news"
+    GDELT = "gdelt"
+
+
+#: Platforms whose records are published *about* a topic rather than *by an
+#: account on it*. A news article has no author account and no posting behaviour,
+#: so it cannot corroborate a social claim and cannot take part in coordination.
+#: Keeping this explicit is what stops a press mention from being counted as an
+#: independent social account and silently upgrading an information grade.
+NEWS_PLATFORMS: frozenset[Platform] = frozenset(
+    {Platform.GOOGLE_NEWS, Platform.GDELT}
+)
 
 
 class StageStatus(StrEnum):
