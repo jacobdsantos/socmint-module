@@ -5,10 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "socmint"
 version = "0.1.0"
-description = "Evidence-first SOCMINT module for topic tracking, multilingual narrative grouping, coordination candidates, and claim review"
+description = "SOCMINT module for cyber threat intelligence: topic-driven collection, multilingual narrative analysis, coordination detection, indicator extraction, and case assessment"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+keywords = ["socmint", "osint", "threat-intelligence", "disinformation", "osint-tools"]
 
 dependencies = [
   "yt-dlp>=2026.10.26",

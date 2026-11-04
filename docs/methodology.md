@@ -181,9 +181,16 @@ Extraction runs twice: on the text as written, and on a normalised copy with
 defanged themselves — the ones most likely to be hostile, and the ones a plain
 domain regex cannot see, because `evil[.]com` is not a domain.
 
-**Every value then gets a role.** A topic search returns posts that cite the
-language documentation, the vendor advisory, and a researcher's blog. Treating
-those as indicators puts legitimate sites on an IOC list.
+**Infrastructure is dropped before classification.** The platform a post was
+published on, a creator's Patreon, a Google Form, a generic cloud host — these
+are not pivots, and listing them as "references" still buries the real values.
+They are excluded at extraction, for both bare domains and URLs. Entries are
+registrable forms (`ecr.aws`, not `gallery.ecr.aws`), because both extraction
+paths reduce a host before comparing.
+
+**Every remaining value then gets a role.** A topic search returns posts that
+cite the language documentation, the vendor advisory, and a researcher's blog.
+Treating those as indicators puts legitimate sites on an IOC list.
 
 | # | Signal | Role |
 |---|---|---|
@@ -195,6 +202,11 @@ those as indicators puts legitimate sites on an IOC list.
 | 6 | Sits in attribution language ("according to", "read the") | reference |
 | 7 | Sits next to hostile-artefact vocabulary | indicator |
 | 8 | None of the above | unknown |
+
+The context window is 120 characters. Wider picks up marketing text from video
+descriptions ("subscribe", "buy my course") as though it were threat context.
+The lure pattern is deliberately narrow — about credentials or money, never
+merely about clicking.
 
 Rules are checked in that order and the firing rule is recorded in
 `role_reason`. A URL inherits its host's role; a bare domain whose only

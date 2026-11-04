@@ -62,13 +62,28 @@ _DEFANGED_HANDLE_RE = re.compile(r"\[@\]([A-Za-z][A-Za-z0-9_]{4,31})\b")
 # Classification signals
 # ---------------------------------------------------------------------------
 
-# The platforms we collect from. A post linking back to its own platform is not a
-# pivot, so these are dropped at extraction rather than classified.
-_PLATFORM_DOMAINS = frozenset(
+# Domains that are infrastructure, not intelligence. A post linking to the
+# platform it was posted on, to a creator's Patreon, or to a form has told the
+# analyst nothing they can pivot on — and listing them as "references" still
+# buries the real values. These are dropped at extraction, for both bare domains
+# and URLs, before classification ever runs.
+#
+# Entries MUST be registrable forms ("ecr.aws", not "gallery.ecr.aws"), because
+# both extraction paths reduce a host to its registrable domain before comparing.
+_SERVICE_DOMAINS = frozenset(
     {
-        "youtube.com", "youtu.be", "t.me", "telegram.me", "twitter.com", "x.com",
-        "facebook.com", "instagram.com", "tiktok.com", "play.google.com",
-        "apps.apple.com", "i.ytimg.com", "m.youtube.com",
+        # the platforms we collect from
+        "youtube.com", "youtu.be", "ytimg.com", "t.me", "telegram.me",
+        "twitter.com", "x.com", "facebook.com", "instagram.com", "tiktok.com",
+        # creator / monetisation / community infrastructure
+        "patreon.com", "buymeacoffee.com", "ko-fi.com", "paypal.me", "paypal.com",
+        "discord.gg", "discord.com", "twitch.tv", "whatsapp.com", "wa.me",
+        "forms.gle", "linktr.ee", "spotify.com", "ycombinator.com",
+        "medium.com", "substack.com", "reddit.com", "quora.com", "linkedin.com",
+        # generic hosting / infra where the domain is never the artefact
+        "cloudflare.com", "wordpress.org", "wordpress.com", "amazonaws.com",
+        "ecr.aws", "railway.com", "railway.app", "vercel.app", "netlify.app",
+        "herokuapp.com", "azurewebsites.net", "googleusercontent.com",
     }
 )
 
@@ -103,6 +118,12 @@ _REFERENCE_DOMAINS = frozenset(
         # analysis / lookup services (people link to their own results)
         "virustotal.com", "urlscan.io", "shodan.io", "censys.io", "any.run",
         "hybrid-analysis.com", "app.any.run", "abuse.ch", "feodotracker.abuse.ch",
+        # security vendors, education channels and industry statistics
+        "aikido.io", "aikido.dev", "snyk.io", "socket.dev", "semgrep.dev",
+        "liveoverflow.com", "hextree.io", "portswigger.net", "acunetix.com",
+        "w3techs.com", "builtwith.com", "similarweb.com", "statista.com",
+        "europa.eu", "enisa.europa.eu", "ncsc.gov.uk", "cyber.gov.au",
+        "jvn.jp", "jpcert.or.jp", "cert-in.org.in",
         # encyclopedic / general
         "wikipedia.org", "archive.org", "web.archive.org", "stackoverflow.com",
         "stackexchange.com", "medium.com", "substack.com", "linkedin.com",
@@ -145,16 +166,27 @@ _BENIGN_CONTEXT = re.compile(
 )
 
 # Language that makes a nearby domain a lure rather than a citation.
+#
+# Deliberately narrow. "click here" was in the first version and it flagged a
+# coaching site's YouTube description, because every marketing blurb says "click
+# here to subscribe". A lure has to be about *credentials or money*, not merely
+# about clicking.
 _CREDENTIAL_LURE = re.compile(
-    r"\b(verify your (account|identity|details|information)|"
-    r"enter your (password|credentials|otp|pin)|one[- ]time (code|password)|"
-    r"click (here|this link|below)|act now|before it'?s too late|"
-    r"account will be (closed|suspended|frozen)|deposits? (are|will be) frozen|"
-    r"confirm your (identity|details|payment)|claim your (refund|prize))\b",
+    r"\b(verify your (account|identity|details|information|payment)|"
+    r"enter your (password|credentials|otp|pin|card)|one[- ]time (code|password)|"
+    r"re-?enter your (password|credentials)|"
+    r"account (will be|has been) (closed|suspended|frozen|locked)|"
+    r"deposits? (are|will be) frozen|"
+    r"confirm your (identity|details|payment|bank)|"
+    r"claim your (refund|prize|winnings)|"
+    r"your (account|card) (is|has been) (compromised|suspended|locked))\b",
     re.IGNORECASE,
 )
 
-_CONTEXT_WINDOW = 220
+# Characters either side of a value to search for context. Tight on purpose:
+# video descriptions and channel bios are long marketing text, and a wide window
+# picks up "subscribe" and "buy my course" as if they were threat context.
+_CONTEXT_WINDOW = 120
 
 
 def defang(value: str) -> str:
@@ -201,20 +233,32 @@ def defanged_values(text: str) -> set[str]:
     return found
 
 
+def _host_of(value: str) -> str:
+    """Registrable host of a URL, or the value itself if it is already a domain."""
+    if value.startswith(("http://", "https://")):
+        rest = value.split("://", 1)[1]
+        host = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        host = host.split("@")[-1].split(":")[0]
+        return _registrable(host)
+    return _registrable(value)
+
+
 def _extract_raw(text: str) -> dict[IndicatorKind, set[str]]:
     found: dict[IndicatorKind, set[str]] = defaultdict(set)
     if not text:
         return found
 
     for url in _URL_RE.findall(text):
-        found[IndicatorKind.URL].add(url.rstrip(".,;:!?"))
+        cleaned = url.rstrip(".,;:!?")
+        if _host_of(cleaned) not in _SERVICE_DOMAINS:
+            found[IndicatorKind.URL].add(cleaned)
 
     for email in _EMAIL_RE.findall(text):
         found[IndicatorKind.EMAIL].add(email.lower())
 
     for domain in _DOMAIN_RE.findall(text):
         base = _registrable(domain)
-        if base not in _PLATFORM_DOMAINS:
+        if base not in _SERVICE_DOMAINS:
             found[IndicatorKind.DOMAIN].add(base)
 
     for candidate in _IPV4_RE.findall(text):
@@ -285,7 +329,7 @@ def classify(
         return IndicatorRole.INDICATOR, "file hash or wallet address"
 
     if kind in {IndicatorKind.DOMAIN, IndicatorKind.URL}:
-        host = _registrable(value.split("/")[2]) if value.startswith("http") else value
+        host = _host_of(value)
         # A URL inherits its host's classification: if the author defanged the
         # domain, the full URL is equally hostile.
         if host in defanged:

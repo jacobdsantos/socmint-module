@@ -189,8 +189,13 @@ Every value in `indicators.csv` carries a **role**. `indicator` means the post
 presents it as an artefact of compromise; `reference` means it is cited
 documentation, a vendor advisory, or a research outlet; `unknown` means the post
 gives no signal. Only indicators feed the risk score, and references are hidden
-by default in the dashboard. A search for a vulnerability name returns posts that
-cite `php.net` and vendor blogs — those are not IOCs.
+by default in the dashboard.
+
+A search for a vulnerability name returns posts that cite `php.net` and vendor
+blogs — those are not IOCs. Neither are the platform a post was published on, a
+creator's Patreon, or a Google Form: infrastructure is dropped before
+classification. On a live `php2shell` collection this takes 195 extracted values
+down to 126, with 88 correctly identified as references and no false indicators.
 
 CSV cells are sanitised against spreadsheet formula injection. Post text is
 untrusted data and is rendered as text, never as HTML.
@@ -300,7 +305,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 104 offline tests, 87% statement coverage.
+- 117 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**104 tests, all passing, 87% statement coverage** across `src/socmint`
+**117 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -228,6 +228,19 @@ by looking at output that was wrong in a way the tests did not catch.
     not a domain to a regex, so the strongest indicator signal produced no
     value at all. Fixed by running extraction a second time on a normalised copy
     of the text.
+20. **The classifier's first version was still wrong on real data.** Re-running it
+    over a live `php2shell` collection produced six "indicators": a coaching
+    site's course pages, a Google Form, and a security vendor's own app. The
+    cause was `click here` in the lure pattern — every YouTube description says
+    it — plus a 220-character context window that swept marketing text into the
+    threat context. Fixed by excluding service/infrastructure domains at
+    extraction, narrowing the lure to credential and financial language, and
+    cutting the window to 120 characters. Result on the same run: 195 values →
+    126, six false indicators → zero, and 88 correctly classified references.
+
+    This is the clearest example in the project of why hand-reading live output
+    matters. Every automated test passed while the classifier was producing a
+    list no analyst would trust.
 
 ---
 
@@ -265,7 +278,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 74 tests
+.venv/bin/pytest -q                                   # 117 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports

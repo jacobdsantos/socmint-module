@@ -270,8 +270,20 @@ are excluded from the benign pattern entirely.
 URL is equally hostile. Conversely, a bare domain whose only appearances are
 inside article-style URLs is a citation.
 
+**Infrastructure is dropped, not classified.** Running the classifier over a real
+`php2shell` collection left 195 values, of which the "indicators" were a coaching
+site's course pages, a Google Form, and a vendor's own app — all flagged because
+every YouTube description says "click here". Two corrections followed: a
+`_SERVICE_DOMAINS` set drops platforms, creator/monetisation links and generic
+hosting before classification, and the lure pattern now requires credential or
+financial language rather than a click. On the same run the result went from 195
+values (6 of them wrong) to 126 values, 0 false indicators, and 88 correctly
+identified references.
+
 **Unknown is a real answer.** Most values carry no signal in a short post. Saying
-so is more useful than forcing a binary, and it is the honest state.
+so is more useful than forcing a binary, and it is the honest state. After the
+corrections above, a typical CVE collection is mostly references and unknowns —
+because that is what a vulnerability discussion actually contains.
 
 **The risk score only counts indicators.** A cited vendor advisory cannot raise
 a case's risk score. References are reported separately and excluded by default
