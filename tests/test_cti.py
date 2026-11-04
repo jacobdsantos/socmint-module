@@ -460,4 +460,21 @@ def test_assessment_reports_excluded_references() -> None:
     result = assess_mod.synthesise(bundle, [], template=CaseTemplate.CUSTOM)
     statement = " ".join(j.statement for j in result.key_judgements)
     assert "1 technical indicator(s)" in statement
-    assert "1 cited reference(s) excluded" in statement
+    assert "1 cited reference(s) were classified as references" in statement
+
+
+def test_assessment_with_only_references_says_so_plainly() -> None:
+    """A CVE discussion yields references and no IOCs; the judgement must read
+    as a finding, not as "0 indicator(s) were extracted: none"."""
+    bundle = _empty_bundle()
+    bundle.indicators = [
+        Indicator(kind=IndicatorKind.DOMAIN, value="php.net", defanged="php[.]net",
+                  role=IndicatorRole.REFERENCE),
+        Indicator(kind=IndicatorKind.URL, value="https://huntress.com/blog/x",
+                  defanged="hxxps://huntress[.]com/blog/x", role=IndicatorRole.REFERENCE),
+    ]
+    result = assess_mod.synthesise(bundle, [], template=CaseTemplate.CUSTOM)
+    statement = " ".join(j.statement for j in result.key_judgements)
+    assert "No technical indicators were extracted" in statement
+    assert "2 cited reference(s)" in statement
+    assert "0 technical indicator(s)" not in statement

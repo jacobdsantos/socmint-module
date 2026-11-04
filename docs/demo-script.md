@@ -12,7 +12,7 @@ credibility rests on that distinction, and an interviewer will test it.
 ## Before the room (10 min, offline)
 
 ```bash
-cd /mnt/c/Users/jacobs/Projects/personal/socmint-module
+cd socmint-module                       # the repository root
 .venv/bin/pytest -q                      # expect: all green
 .venv/bin/socmint list                   # note the run IDs you plan to show
 .venv/bin/streamlit run app.py           # http://127.0.0.1:8511

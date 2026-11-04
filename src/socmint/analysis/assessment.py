@@ -176,14 +176,22 @@ def _judgements(
         kinds: dict[str, int] = {}
         for indicator in actionable:
             kinds[indicator.kind.value] = kinds.get(indicator.kind.value, 0) + 1
+        if actionable:
+            statement = (
+                f"{len(actionable)} technical indicator(s) were extracted: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))
+            )
+        elif references:
+            statement = "No technical indicators were extracted"
+        else:
+            statement = "No value in this sample carried enough context to be judged an indicator"
+        if references:
+            statement += (
+                f"; {len(references)} cited reference(s) were classified as references "
+                "and excluded from the indicator set"
+            )
         add(
-            f"{len(actionable)} technical indicator(s) were extracted: "
-            + (", ".join(f"{k}={v}" for k, v in sorted(kinds.items())) or "none")
-            + (
-                f"; {len(references)} cited reference(s) excluded from the indicator set"
-                if references
-                else ""
-            ),
+            statement,
             "low",
             [i.defanged for i in actionable[:5]],
             [

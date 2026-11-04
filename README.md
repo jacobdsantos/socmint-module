@@ -164,7 +164,9 @@ narrative. **Never mix it into a live evidence set.**
 .venv/bin/streamlit run app.py
 ```
 
-Binds to loopback by default.
+Serves at <http://127.0.0.1:8511>, loopback only (set in
+`.streamlit/config.toml`). Eight tabs: Assessment, Indicators, Narratives,
+Coordination, Spread, Claims, Coverage, Evidence.
 
 ### Export layout
 
@@ -305,7 +307,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 117 offline tests, 86% statement coverage.
+- 118 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

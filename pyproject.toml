@@ -11,6 +11,9 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 keywords = ["socmint", "osint", "threat-intelligence", "disinformation", "osint-tools"]
 
+[project.urls]
+Repository = "https://github.com/jacobdsantos/socmint-module"
+
 dependencies = [
   "yt-dlp>=2026.10.26",
   "ddgs>=9.5",

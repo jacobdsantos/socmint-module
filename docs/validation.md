@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**117 tests, all passing, 86% statement coverage** across `src/socmint`
+**118 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -242,6 +242,23 @@ by looking at output that was wrong in a way the tests did not catch.
     matters. Every automated test passed while the classifier was producing a
     list no analyst would trust.
 
+### Verification environment
+
+21. **A running dashboard serves the code it imported at start-up.** After fixing
+    the classifier, the already-running Streamlit process still rendered the old
+    numbers: Streamlit reloads `app.py` on each render but does not reload the
+    imported `socmint` package. The dashboard has to be restarted after any
+    change under `src/`. The same applies to stored runs — an analysis persisted
+    before a classifier change keeps its old roles until it is re-analysed, which
+    is why the live `php2shell` run in the demo database was re-analysed from its
+    stored posts (no new collection) rather than left as a pre-fix snapshot.
+
+    Consequence for the judgement text: with 88 references and no indicators the
+    key judgement used to read `0 technical indicator(s) were extracted: none`,
+    which reads like a failure rather than a finding. It now reads
+    `No technical indicators were extracted; 88 cited reference(s) were
+    classified as references and excluded from the indicator set`.
+
 ---
 
 ## 6. False positives and false negatives observed
@@ -278,7 +295,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 117 tests
+.venv/bin/pytest -q                                   # 118 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports
