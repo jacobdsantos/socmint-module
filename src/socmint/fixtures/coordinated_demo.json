@@ -1,0 +1,235 @@
+{
+  "notice": "SYNTHETIC SCENARIO. Fictional topic, fictional accounts, invented text. Used only to demonstrate that the coordination detector fires on repeated, time-aligned, near-identical posting. It is not a real campaign and must never be presented as live collection.",
+  "topic": "Acme Bank collapse",
+  "window_start": "2026-10-20T00:00:00+00:00",
+  "window_end": "2026-10-22T00:00:00+00:00",
+  "posts": [
+    {
+      "platform": "telegram",
+      "id": "9001",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 0,
+      "text": "BREAKING: Acme Bank has collapsed and all customer deposits are frozen effective immediately. Withdraw your funds now before branches close."
+    },
+    {
+      "platform": "telegram",
+      "id": "9002",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 3,
+      "text": "BREAKING: Acme Bank has collapsed and all customer deposits are frozen effective immediately. Withdraw your funds now before branches close."
+    },
+    {
+      "platform": "telegram",
+      "id": "9003",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 6,
+      "text": "BREAKING: Acme Bank has collapsed and all customer deposits are frozen effective immediately. Withdraw your funds now before branches close."
+    },
+    {
+      "platform": "telegram",
+      "id": "9007",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 12,
+      "text": "Sources say Acme Bank closed 12 branches across Metro Manila and 2000 customers were affected by the freeze, according to an internal memo."
+    },
+    {
+      "platform": "telegram",
+      "id": "9004",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 240,
+      "text": "URGENT UPDATE: Acme Bank branches nationwide are shutting down today. Customers report being unable to withdraw cash from ATMs."
+    },
+    {
+      "platform": "telegram",
+      "id": "9005",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 243,
+      "text": "URGENT UPDATE: Acme Bank branches nationwide are shutting down today. Customers report being unable to withdraw cash from ATMs."
+    },
+    {
+      "platform": "telegram",
+      "id": "9006",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 247,
+      "text": "URGENT UPDATE: Acme Bank branches nationwide are shutting down today. Customers report being unable to withdraw cash from ATMs."
+    },
+    {
+      "platform": "youtube",
+      "id": "dQw4w9WgXcQ",
+      "author": "UC_acme_alerts",
+      "name": "Acme Alerts PH",
+      "minutes": 480,
+      "title": "Acme Bank Collapse - Everything You Need To Know",
+      "text": "Acme Bank has collapsed and deposits are frozen. This is an emergency update for all account holders."
+    },
+    {
+      "platform": "telegram",
+      "id": "9100",
+      "author": "abs_cbn_news",
+      "name": "ABS-CBN News",
+      "minutes": 30,
+      "text": "The Bangko Sentral ng Pilipinas said in a statement that Acme Bank remains solvent and urged the public to avoid spreading unverified claims."
+    },
+    {
+      "platform": "telegram",
+      "id": "9101",
+      "author": "manila_bulletin",
+      "name": "Manila Bulletin",
+      "minutes": 95,
+      "text": "Acme Bank clarified that only two provincial branches suspended operations due to a systems outage, and that withdrawals remain available nationwide."
+    },
+    {
+      "platform": "telegram",
+      "id": "9102",
+      "author": "finance_desk",
+      "name": "Finance Desk",
+      "minutes": 180,
+      "text": "Analysts noted that Acme Bank's capital adequacy ratio remains above regulatory minimums, contradicting rumours of an imminent collapse."
+    },
+    {
+      "platform": "telegram",
+      "id": "9103",
+      "author": "verified_facts_ph",
+      "name": "Verified Facts PH",
+      "minutes": 300,
+      "text": "Fact check: the viral message claiming Acme Bank deposits are frozen has no basis. The central bank has not issued any such advisory."
+    },
+    {
+      "platform": "telegram",
+      "id": "9201",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 37,
+      "text": "Weather advisory: scattered thunderstorms expected over Luzon this weekend with moderate winds."
+    },
+    {
+      "platform": "telegram",
+      "id": "9202",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 128,
+      "text": "The national basketball team advanced to the finals after a close game decided in overtime."
+    },
+    {
+      "platform": "telegram",
+      "id": "9203",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 611,
+      "text": "A new rail line extension opened to commuters this week, cutting travel time across the city."
+    },
+    {
+      "platform": "telegram",
+      "id": "9204",
+      "author": "acme_alerts_ph",
+      "name": "Acme Alerts PH",
+      "minutes": 902,
+      "text": "University entrance exam results will be released online next month, the education department said."
+    },
+    {
+      "platform": "telegram",
+      "id": "9211",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 74,
+      "text": "Fuel prices are set to increase slightly next week, according to the weekly industry notice."
+    },
+    {
+      "platform": "telegram",
+      "id": "9212",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 199,
+      "text": "A film festival opened downtown with screenings from independent local directors this weekend."
+    },
+    {
+      "platform": "telegram",
+      "id": "9213",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 433,
+      "text": "The agriculture department distributed seedlings to farmers affected by the dry spell."
+    },
+    {
+      "platform": "telegram",
+      "id": "9214",
+      "author": "ph_finance_watch",
+      "name": "PH Finance Watch",
+      "minutes": 1015,
+      "text": "Coastal communities were advised to prepare as a low pressure area formed east of the islands."
+    },
+    {
+      "platform": "telegram",
+      "id": "9221",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 51,
+      "text": "A popular restaurant chain opened three new branches in the southern provinces this month."
+    },
+    {
+      "platform": "telegram",
+      "id": "9222",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 167,
+      "text": "Local football clubs will begin their season next week with matches scheduled across the region."
+    },
+    {
+      "platform": "telegram",
+      "id": "9223",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 512,
+      "text": "A technology conference drew thousands of attendees to discuss artificial intelligence and robotics."
+    },
+    {
+      "platform": "telegram",
+      "id": "9224",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 880,
+      "text": "The transport department announced new bus routes serving commuters in the northern districts."
+    },
+    {
+      "platform": "youtube",
+      "id": "yt_news_002",
+      "author": "UC_manila_bulletin",
+      "name": "Manila Bulletin",
+      "minutes": 420,
+      "title": "Acme Bank denies collapse rumours",
+      "text": "Manila Bulletin reports that Acme Bank denied rumours of a collapse, citing a systems outage at two branches."
+    },
+    {
+      "platform": "telegram",
+      "id": "9301",
+      "author": "acme_alerts_ph",
+      "name": "Acme Bank Official Alerts",
+      "minutes": 305,
+      "text": "URGENT: Acme Bank customers must verify your account at acme-bank-secure.com within 24 hours or deposits will be forfeited. Enter your password and OTP to keep your funds."
+    },
+    {
+      "platform": "youtube",
+      "id": "yt_check_001",
+      "author": "UC_ph_media_check",
+      "name": "PH Media Check",
+      "minutes": 640,
+      "title": "Is the Acme Bank CEO video a deepfake?",
+      "text": "Analysts say the widely shared video of the Acme Bank CEO announcing the collapse may be a deepfake. The clip was first posted at 03:12 UTC and has been reposted by dozens of accounts. Contact @acmebank_press for verification."
+    },
+    {
+      "platform": "telegram",
+      "id": "9302",
+      "author": "bank_news_daily",
+      "name": "Bank News Daily",
+      "minutes": 700,
+      "text": "A leaked customer database from Acme Bank is reportedly being sold. The seller lists an archive with SHA256 9f2c4a7e1b3d5f8092a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8 and requests payment to bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+    }
+  ]
+}

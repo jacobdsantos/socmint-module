@@ -1,0 +1,272 @@
+# How the output was checked
+
+This document records what I actually verified, what I found wrong, and what
+remains unverified. It is deliberately organised around the errors rather than
+the successes, because the errors are the evidence that checking happened.
+
+Three layers of checking, in increasing order of how much they cost:
+
+| Layer | What it catches | Cost |
+|---|---|---|
+| Automated tests | Contract violations, parser edge cases, failure paths | Cheap, runs in CI |
+| Hand-reading live output | Wrong-but-plausible results the tests cannot see | Expensive, done once per sample |
+| Labelled synthetic fixture | Detector behaviour where a real positive does not exist | Built once, reused |
+
+---
+
+## 1. Automated tests
+
+**104 tests, all passing, 87% statement coverage** across `src/socmint`
+(`pytest --cov=src/socmint --cov-report=term-missing`).
+
+Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
+100%, `models.py` 99%, `assessment.py` 96%, `grading.py` 95%, `threat.py` 94%,
+`indicators.py` 84%.
+
+| Area | What is asserted |
+|---|---|
+| Text normalisation | Tokenisation, hashtags, shingles, Jaccard, language detection |
+| Collection parsing | Telegram page parsing, YouTube entry mapping, timestamp precision |
+| Discovery | Query generation, date-bound operators, relevance filtering, channel cap |
+| Collection flow | Pagination, early abort, rate-limit status mapping, empty results |
+| Coordination | Episode construction, independence rule, popularity discounting, baseline |
+| Analysis | Centring, degenerate vectors, clustering, labelling, framing, grading |
+| Security | SSRF guard, host allowlist, size cap, CSV formula injection |
+| Pipeline | Dedupe, language enrichment, in-scope filtering, end-to-end wiring |
+| Exports + demo | Artefact set, no-overwrite, Admiralty columns, assessment output |
+| CLI | Date parsing (inclusive local day → half-open UTC), invalid ranges |
+
+What the tests deliberately do **not** cover: live network behaviour. Network
+tests are marked and skipped by default, because a flaky external dependency in
+the suite trains you to ignore failures.
+
+One test violated that rule and was fixed rather than tolerated.
+`test_allowed_host_accepted` asserted that `https://t.me/s/example` passed the
+SSRF guard, but `validate_public_url` resolves DNS, and behind corporate DNS
+`t.me` resolves to a private address — so the test failed for environmental
+reasons while the code was behaving correctly. The guard's fail-closed behaviour
+is right; a unit test that depends on DNS is not. Resolution is now injectable,
+the allowlist logic is tested offline, and two new tests assert the two cases
+that actually matter: an allowlisted host resolving inside the network is still
+rejected, and a DNS failure fails closed.
+
+---
+
+## 2. Threshold calibration
+
+The clustering threshold is the one number that most affects output quality, so
+it was measured rather than guessed.
+
+**Measurement.** Encode pairs of posts from a live sample and record raw e5
+cosine similarity:
+
+| Pair type | Raw cosine |
+|---|---|
+| Same event, paraphrased | ≈ 0.87 |
+| Unrelated posts on the same topic | ≈ 0.76 |
+
+A threshold between 0.87 and 0.76 is a 0.11-wide window on a metric that shifts
+with corpus composition. That is not a defensible cut.
+
+**Fix.** Subtract the batch mean from every embedding before clustering. This
+removes the shared "social post about news" direction that inflates all pairwise
+similarity, and opens the gap. The clustering threshold (`narrative_similarity =
+-0.15`) is therefore expressed in **centred** cosine space, which is why the
+number looks strange out of context.
+
+**Coordination threshold** (`coordination_semantic_similarity = 0.45`) was set
+above the measured live peak of 0.313 for unrelated accounts, so that
+same-topic-but-different-subject pairs do not link.
+
+---
+
+## 3. Hand-checking live runs
+
+Four topics were run live and the output read end to end.
+
+| Topic | YouTube | Telegram | Narratives | Coordination |
+|---|---|---|---|---|
+| earthquake Philippines | 20 | 10 | 2 | 0 |
+| typhoon Philippines | 18 | 0 | 2 | 0 |
+| Mayon volcano | 17 | 2 | 2 | 0 |
+| West Philippine Sea | 18 | 0 | 1 | 0 |
+
+**The zero coordination results are correct negatives, not failures.** For the
+earthquake sample I inspected the account pairs directly: measured peak
+cross-account similarity was **0.313** against a **0.45** threshold, because the
+two Telegram accounts discovered were covering *different* earthquakes. Linking
+them would have been a false positive.
+
+That left the detector undemonstrated, so a labelled synthetic scenario was built
+to exercise it (see §4). Reporting "0 on live data, demonstrated on a fixture"
+is the honest outcome. Reporting "3 coordinated groups found" by lowering the
+threshold until something fired would not have been.
+
+**What hand-reading found that tests could not:**
+
+- Telegram discovery is non-deterministic — the same query returns different
+  channels across calls. Documented as a coverage weakness, not fixed, because it
+  is a property of the search backend.
+- Relevance matching is precision-first (all significant words must appear). It
+  misses paraphrases. This was a deliberate trade: recall loss is visible in the
+  coverage numbers, whereas false inclusion is invisible once a post is in the
+  corpus.
+
+---
+
+## 4. The labelled synthetic fixture
+
+`src/socmint/fixtures/coordinated_demo.json` — a fictional "Acme Bank collapse"
+scenario, 28 posts, three accounts posting near-identical text minutes apart,
+plus varied filler posts and a denial narrative.
+
+Purpose: create a **known positive** so the detector's firing can be inspected,
+and so the CTI layer has something to extract from.
+
+| Check | Result |
+|---|---|
+| Coordination groups detected | 1 (3 accounts, 6 matched episodes) |
+| Time-shuffle baseline | 0.0 qualifying pairs by chance |
+| Indicators extracted | 4 (domain, SHA256, wallet, Telegram handle) |
+| Impersonation signals | 4 distinct kinds, high severity, medium confidence |
+| Lookalike domain | `acme-bank-secure.com` flagged via two brand words |
+| Risk score | 60/100, itemised across three factors |
+
+Every artefact from this fixture is tagged `synthetic_fixture` in the run config
+and manifest, and the CLI prints a warning line before the summary. It is never
+mixed into a live evidence set.
+
+The fixture is labelled synthetic **because a real coordinated campaign cannot be
+manufactured and attributed to real people for a demo.** Using it to prove
+implementation behaviour is legitimate; using it to claim real-world detection
+accuracy would not be.
+
+---
+
+## 5. Bugs that checking found
+
+These are the substantive corrections made during the build. Each one was found
+by looking at output that was wrong in a way the tests did not catch.
+
+### Collection
+
+1. **`safe_get` re-decompressed decoded bytes.** Rebuilding an `httpx.Response`
+   from already-decoded content made httpx re-apply `Content-Encoding: gzip`,
+   raising `DecodingError`. Fixed by returning a `FetchResult` value object
+   instead of reconstructing a response.
+2. **DDGS "No results found." counted as a failure.** A normal empty result was
+   inflating the error count. Now mapped to `StageStatus.EMPTY`.
+3. **YouTube returned 0 in-window posts.** Keyword search ranks by relevance, not
+   date, so a two-week window yielded nothing. Fixed with `after:`/`before:`
+   operators — 20/20 in-window versus 0–2 unbounded.
+4. **Discovery kept every search hit.** Irrelevant channels consumed retrieval
+   budget. Fixed with a word-hit relevance filter before the budget is spent.
+5. **Channel abort counted in-window posts instead of topic matches.** A valid
+   news channel was discarded because its matching posts fell outside the window.
+6. **429 was logged as `failed`,** so `rate_limited` never surfaced. Status codes
+   are now mapped explicitly.
+
+### Analysis
+
+7. **Centring identical vectors produced zero vectors,** and cosine clustering
+   raised `ValueError`. Fixed with a degenerate-row fallback to the original
+   direction.
+8. **Information grade counted coordination as corroboration.** My first
+   implementation graded information by counting accounts inside a cluster. That
+   is wrong twice: identical text across accounts is coordination, not
+   independent support; and a cluster spanning most of the corpus upgrades every
+   post for free. Fixed by skipping catch-all clusters (>60% of the corpus) and
+   treating identical text as a coordination signal. After the fix, the synthetic
+   demo correctly grades every post **6** — cannot be judged — because its only
+   cluster is a catch-all.
+9. **Impersonation severity summed repetitions.** Six posts saying "urgent"
+   scored six times, letting a noisy corpus outrank a targeted campaign. Fixed:
+   severity counts *distinct signal kinds*, not per-post occurrences.
+10. **Brand tokens never matched.** `topic_terms("Acme Bank collapse")` returns
+    the whole phrase, so the lookalike comparison ran against
+    `"acmebankcollapse"` and never matched `acme-bank-secure.com`. Fixed by
+    splitting the topic into a compacted phrase (for typo distance) and
+    individual words (for containment).
+11. **A "mentions the brand" signal was emitting on the whole corpus,** inflating
+    the distinct-kind count for zero information. Removed.
+
+### Application
+
+12. **Streamlit could not read its own database.** `@st.cache_resource` created
+    the SQLite connection on one worker thread; the next render ran on another,
+    raising `SQLite objects created in a thread can only be used in that same
+    thread`. Fixed by opening with `check_same_thread=False` **and** serialising
+    access with a lock — the thread check is replaced by real synchronisation,
+    not simply switched off.
+13. **Dark-on-dark headings.** Styling `.stApp` fought Streamlit's own theme.
+    Fixed by configuring the theme in `.streamlit/config.toml` rather than
+    overriding it in CSS.
+14. **An SSRF test depended on live DNS.** `validate_public_url` resolves the
+    hostname, so the unit test passed or failed with the machine's DNS. Fixed by
+    making the resolver injectable; the guard still fails closed in production.
+15. **Newsroom names with underscores never matched the grade rule.**
+    `_NEWSROOM_PATTERN` uses `\b`, which does not break on `_`, so
+    `manila_bulletin_news` was graded F instead of C. Fixed by normalising
+    separators before matching.
+16. **Telegram handles lost their sigil.** The regex captured the bare name, so
+    the defanged form was `acmebank_press` instead of `[@]acmebank_press`. Fixed
+    by storing the handle with its `@`.
+
+### Indicators
+
+17. **Every mentioned domain was reported as an indicator.** Found by running a
+    `php2shell` search: `php.net`, `huntress.com` and a researcher's blog all
+    appeared on the IOC list. The module had no concept of a *reference*. Fixed
+    by adding an ordered role classifier (indicator / reference / unknown) that
+    records which rule fired. See `docs/decisions.md` §10.
+18. **The role classifier then misclassified the demo's own phishing domain.**
+    `verify` was in the benign-language pattern (meaning "verify the checksum"),
+    so *"verify your account at acme-bank-secure.com"* scored as a citation. Fixed
+    by adding a credential-lure rule that outranks attribution language and
+    removing `verify`/`integrity` from the benign pattern.
+19. **Author-defanged values were recorded but never extracted.** `evil[.]com` is
+    not a domain to a regex, so the strongest indicator signal produced no
+    value at all. Fixed by running extraction a second time on a normalised copy
+    of the text.
+
+---
+
+## 6. False positives and false negatives observed
+
+| Type | Observed | Assessment |
+|---|---|---|
+| Coordination false positive | Not observed in the live samples (detector stayed silent) | The two-episode rule and the baseline are the guards; unmeasured at scale |
+| Coordination false negative | Likely — two Telegram channels is a thin sample | Acknowledged; no recall figure claimed |
+| Narrative false positive | Same-topic clusters can merge opposing stances | Mitigated by reviewer split/merge controls, not by the algorithm |
+| Framing false positive | A post *discussing* a deepfake is flagged as a deepfake claim | The signal is explicitly labelled `deepfake_claim` and the caveat says so |
+| Indicator false positive | `bit.ly` and other reference domains excluded by allowlist; unknown shorteners can slip through | Extraction is a lead, not a verdict |
+| Language detection | Short posts and code-switching produce low-confidence guesses | Confidence is stored and shown, not discarded |
+| Timestamp | Date-only Telegram posts cannot support minute-level synchrony | Such posts are excluded from coordination pairing |
+
+**No precision or recall figure is claimed for live data.** No ground truth
+exists for the sampled topics, and inventing a percentage from four runs would be
+worse than stating the gap.
+
+---
+
+## 7. What is still unverified
+
+| Unverified | Why it matters |
+|---|---|
+| Coordination precision at scale | Four samples, zero positives. A precision estimate would need a labelled corpus |
+| Cross-language grouping quality | Tested on English/Filipino/Spanish examples; the model claims 100 languages, which is not the same as validated on them |
+| Telegram discovery recall | Web search surfaces a fraction of relevant channels; the fraction is unknown |
+| Framing classifier accuracy | Keyword matching has no held-out evaluation; it is a lens, not a classifier |
+| Lookalike domain judgement | String distance only; no registration, hosting, or content check |
+| Risk score calibration | It is an unvalidated heuristic by construction. The itemisation is what makes it defensible, not the number |
+
+---
+
+## 8. Reproduction
+
+```bash
+.venv/bin/pytest -q                                   # 74 tests
+.venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
+.venv/bin/socmint demo --export exports               # labelled synthetic scenario
+.venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports
+```
