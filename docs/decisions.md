@@ -28,6 +28,7 @@ scraping:
 | YouTube | **Works** — anonymous `ytsearch` + metadata via yt-dlp | Live |
 | Telegram | **Works** — public `t.me/s/` preview, no account | Live |
 | Mastodon | **Works** — public tag timelines, no account | Live |
+| Reddit | **Works** — free OAuth app; public JSON is bot-blocked | Live |
 | Google News | **Works** — public RSS search, no key | Live |
 
 **Why a news source at all.** Three social platforms answer "what are people

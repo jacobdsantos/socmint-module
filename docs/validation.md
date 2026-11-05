@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**161 tests, all passing, 86% statement coverage** across `src/socmint`
+**171 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -296,6 +296,21 @@ by looking at output that was wrong in a way the tests did not catch.
     suite. A test that wants a response still patches it in its own body, which
     runs after the fixture and wins.
 
+26. **Reddit's public JSON is blocked but its OAuth API is not.** From this
+    network `www.reddit.com/r/<sub>/new.json` returns a 403 bot-block page while
+    `www.reddit.com/api/v1/access_token` returns Reddit's own
+    `{"message":"Unauthorized","error":401}`. That difference is what made the
+    adapter worth writing: the protocol is reachable, only the unauthenticated
+    surface is blocked. The exchange was exercised against the live endpoint
+    with deliberately wrong credentials before the adapter was trusted — it
+    returned a clean 401, so the code path is real rather than mocked.
+
+27. **`.env` was not in `.gitignore`.** Adding `.env.example` to document the
+    Reddit credentials created the exact situation where someone copies it to
+    `.env`, fills in a real secret, and commits it. `.env` is now ignored and
+    `.env.example` is not, which was verified with `git check-ignore` rather
+    than assumed.
+
 ---
 
 ## 6. False positives and false negatives observed
@@ -332,7 +347,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 161 tests
+.venv/bin/pytest -q                                   # 171 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports

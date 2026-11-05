@@ -54,6 +54,12 @@ Federated copies are de-duplicated by the status `uri`, not its instance-local
 `id`: the same post carries a different `id` on every instance that relays it,
 so keying on `id` returns one post four times.
 
+**Reddit.** A global keyword search sorted by newest. Reddit's search has no
+absolute date filter, so the collector pages backwards until it passes the
+window start; a very old window under heavy recent activity can exhaust the
+page budget first, which is reported as truncation. Relevance is decided per
+post from the title and body.
+
 **Google News.** A single keyless RSS query, phrase-quoted with aliases OR'd.
 The feed is reverse-chronological and capped near 100 items, so the request asks
 for the whole lookback window and the exact window is applied locally

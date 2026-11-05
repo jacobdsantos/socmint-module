@@ -74,6 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="skip the embedding model and use lexical grouping")
     run.add_argument("--no-news", action="store_true",
                      help="skip Google News; collect social sources only")
+    run.add_argument("--no-reddit", action="store_true",
+                     help="skip Reddit (needs REDDIT_CLIENT_ID/SECRET)")
     run.add_argument("--gdelt", action="store_true",
                      help="also query GDELT (IP rate-limited; off by default)")
 
@@ -204,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
 
         config = replace(config, budgets=replace(config.budgets, max_posts_per_run=args.max_posts))
-    if args.no_news or args.gdelt:
+    if args.no_news or args.no_reddit or args.gdelt:
         from dataclasses import replace
 
         config = replace(
@@ -212,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             budgets=replace(
                 config.budgets,
                 enable_google_news=not args.no_news,
+                enable_reddit=not args.no_reddit,
                 enable_gdelt=args.gdelt,
             ),
         )

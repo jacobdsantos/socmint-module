@@ -102,7 +102,7 @@ conflict disinformation, impersonation/deepfake, hacktivist data leak.
 
 ## Day 5 — Verification: COMPLETE
 
-- [x] 161 tests passing, `ruff` clean
+- [x] 171 tests passing, `ruff` clean
 - [x] Statement coverage measured at 86%
 - [x] README, `docs/methodology.md`, `docs/access-and-limitations.md` written
 - [x] `docs/decisions.md`, `docs/validation.md`, `docs/demo-script.md` written
@@ -142,18 +142,22 @@ non-deterministic, and the public preview only shows recent posts.
 ## Open risks
 - Telegram discovery quality varies per run.
 - Mastodon is hashtag-seeded: no tag, no coverage. Cyber topics get little.
+- Reddit needs a free OAuth app; without one it reports `unsupported`.
 - GDELT is IP-rate-limited and disabled by default; Google News is the news path.
 - No ground-truth evaluation of coordination precision on live data.
 - Platform terms restrict automated collection/AI use; see docs/access-and-limitations.md.
 
 ## Sources added after the initial build
 
-Mastodon and Google News, both free and keyless, plus a GDELT adapter left
-disabled by default.
+Mastodon and Google News, both free and keyless, plus Reddit (free OAuth app)
+and a GDELT adapter left disabled by default.
 
 - Mastodon federates: the same status has a different local `id` on each
   instance, so identity is keyed on `uri`. Without that, four instances return
   one post four times.
+- Reddit's public JSON is bot-blocked from this network while the OAuth
+  token endpoint answers; the credential is read from the environment and
+  `.env` is gitignored.
 - News records are in `models.NEWS_PLATFORMS` and are excluded from coordination
   and from account-based corroboration. A press mention is not a second account.
 - Tests are offline by default via an autouse fixture in `conftest.py` that

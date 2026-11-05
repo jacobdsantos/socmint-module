@@ -19,7 +19,7 @@ from .analysis import indicators as indicator_mod
 from .analysis import narratives as narr_mod
 from .analysis import propagation as prop_mod
 from .analysis import threat as threat_mod
-from .collection import discovery, gdelt, mastodon, news_rss, telegram, youtube
+from .collection import discovery, gdelt, mastodon, news_rss, reddit, telegram, youtube
 from .models import (
     TLP,
     AnalysisBundle,
@@ -79,6 +79,8 @@ def collect(
     reports: list[PlatformReport] = []
 
     platforms = [Platform.YOUTUBE, Platform.TELEGRAM, Platform.MASTODON]
+    if config.budgets.enable_reddit:
+        platforms.append(Platform.REDDIT)
     if config.budgets.enable_google_news:
         platforms.append(Platform.GOOGLE_NEWS)
     if config.budgets.enable_gdelt:
@@ -185,6 +187,23 @@ def collect(
             report.sources_found = len(
                 {p.author_id for p in fetch.posts if p.author_id}
             )
+            report.discovery = fetch.status
+            report.retrieval = fetch.status
+            report.truncated = fetch.truncated
+
+        elif platform is Platform.REDDIT:
+            fetch = reddit.collect(
+                run.topic,
+                aliases=run.aliases,
+                window_start=run.window.start,
+                window_end=run.window.end,
+                budgets=config.budgets,
+                credentials=config.reddit,
+            )
+            run.queries.extend(fetch.queries)
+            report.notes.extend(fetch.notes)
+            platform_posts.extend(fetch.posts)
+            report.sources_found = len({p.author_id for p in fetch.posts if p.author_id})
             report.discovery = fetch.status
             report.retrieval = fetch.status
             report.truncated = fetch.truncated

@@ -53,13 +53,17 @@ def _no_live_network(monkeypatch):
     entry point in each collector module; a test that wants a response patches
     it in its own body, which runs after this fixture and wins.
     """
-    from socmint.collection import gdelt, mastodon, news_rss
+    from socmint.collection import gdelt, mastodon, news_rss, reddit
 
     def _blocked(*args, **kwargs):
         raise RuntimeError("live network access is blocked in tests")
 
-    for module in (gdelt, mastodon, news_rss):
-        monkeypatch.setattr(module, "safe_get", _blocked)
+    for module in (gdelt, mastodon, news_rss, reddit):
+        # Reddit goes through safe_request (it needs POST for the token), so
+        # patching only safe_get would leave it free to reach the network.
+        for name in ("safe_get", "safe_request"):
+            if hasattr(module, name):
+                monkeypatch.setattr(module, name, _blocked)
 
 
 @pytest.fixture

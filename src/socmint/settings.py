@@ -45,6 +45,8 @@ class Budgets:
     enable_gdelt: bool = False
     # Google News RSS is free, keyless and reliable from the same network.
     enable_google_news: bool = True
+    # Reddit needs a free OAuth app; enabled only when credentials exist.
+    enable_reddit: bool = True
     google_news_max_items: int = 100
     user_agent: str = (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -73,11 +75,37 @@ class AnalysisSettings:
 
 
 @dataclass(frozen=True)
+class RedditCredentials:
+    """Free Reddit OAuth app credentials, read from the environment.
+
+    Reddit is the one source here that needs a key. It is free and read-only,
+    but a key is still a secret, so it never appears in code, exports, or logs --
+    only in the environment that runs the collector.
+    """
+
+    client_id: str | None = None
+    client_secret: str | None = None
+    user_agent: str = "socmint/0.1 (research prototype)"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.client_id and self.client_secret)
+
+
+def _reddit_credentials_from_env() -> RedditCredentials:
+    return RedditCredentials(
+        client_id=os.environ.get("REDDIT_CLIENT_ID") or None,
+        client_secret=os.environ.get("REDDIT_CLIENT_SECRET") or None,
+    )
+
+
+@dataclass(frozen=True)
 class AppConfig:
     budgets: Budgets = field(default_factory=Budgets)
     analysis: AnalysisSettings = field(default_factory=AnalysisSettings)
     data_dir: Path = DEFAULT_DATA_DIR
     offline: bool = False
+    reddit: RedditCredentials = field(default_factory=_reddit_credentials_from_env)
 
     def run_dir(self, run_id: str) -> Path:
         return self.data_dir / "runs" / run_id

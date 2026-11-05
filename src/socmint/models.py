@@ -22,6 +22,7 @@ class Platform(StrEnum):
     YOUTUBE = "youtube"
     TELEGRAM = "telegram"
     MASTODON = "mastodon"
+    REDDIT = "reddit"
     GOOGLE_NEWS = "google_news"
     GDELT = "gdelt"
 

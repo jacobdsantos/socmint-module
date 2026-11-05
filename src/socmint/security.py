@@ -34,6 +34,10 @@ ALLOWED_HOSTS: frozenset[str] = frozenset(
         "mastodon.online",
         "fosstodon.org",
         "mstdn.social",
+        # Reddit: free OAuth app; token endpoint answers, public JSON is
+        # bot-blocked, so the OAuth host is the only usable surface.
+        "www.reddit.com",
+        "oauth.reddit.com",
         # Free, keyless news indexes.
         "news.google.com",
         "api.gdeltproject.org",
@@ -146,13 +150,49 @@ def safe_get(
     allowed_hosts: Iterable[str] | None = ALLOWED_HOSTS,
 ) -> FetchResult:
     """GET a validated public URL, refusing oversized bodies."""
-    validate_public_url(url, allowed_hosts=allowed_hosts)
-    with httpx.stream(
+    return safe_request(
         "GET",
         url,
         timeout=timeout,
+        max_bytes=max_bytes,
+        user_agent=user_agent,
+        allowed_hosts=allowed_hosts,
+    )
+
+
+def safe_request(
+    method: str,
+    url: str,
+    *,
+    timeout: float = 25.0,
+    max_bytes: int = 5_000_000,
+    user_agent: str,
+    allowed_hosts: Iterable[str] | None = ALLOWED_HOSTS,
+    headers: Mapping[str, str] | None = None,
+    data: Mapping[str, str] | None = None,
+    auth: tuple[str, str] | None = None,
+) -> FetchResult:
+    """Validated request on an approved host, refusing oversized bodies.
+
+    ``safe_get`` is the read-only case. The extra parameters exist for OAuth
+    token exchange (Reddit), which needs a POST and a basic-auth header -- the
+    host allowlist and the private-address check apply identically either way,
+    so authentication must not mean bypassing them.
+    """
+    validate_public_url(url, allowed_hosts=allowed_hosts)
+    request_headers = {
+        "User-Agent": user_agent,
+        "Accept-Language": "en,*;q=0.5",
+        **(headers or {}),
+    }
+    with httpx.stream(
+        method.upper(),
+        url,
+        timeout=timeout,
         follow_redirects=True,
-        headers={"User-Agent": user_agent, "Accept-Language": "en,*;q=0.5"},
+        headers=request_headers,
+        data=dict(data) if data else None,
+        auth=auth,
     ) as response:
         # Re-validate after redirects.
         if response.url.host:

@@ -11,12 +11,18 @@ read before using the tool on anything other than public research.
 | YouTube | `yt-dlp` search + metadata extraction | No | Free |
 | Telegram | Public web preview `t.me/s/<channel>` | No | Free |
 | Mastodon | Public tag timeline `/api/v1/timelines/tag/<tag>` | No | Free |
+| Reddit | OAuth client-credentials, read-only | Yes, free | Free |
 | Google News | Public RSS search feed | No | Free |
 | GDELT (optional, off) | DOC 2.0 API | No | Free, IP-rate-limited |
 | Discovery | `ddgs` metasearch library | No | Free |
 
-No API keys, subscriptions, proxies, or accounts are required. The multilingual
-embedding model is downloaded once and cached locally.
+Reddit is the one exception: it needs a free "script" app credential. Without
+it the platform reports `unsupported` rather than `empty`, because a missing key
+and an absence of posts are different findings. The key is read from the process
+environment and never written to code, logs, or exports.
+
+No paid API keys, subscriptions, proxies, or accounts are required. The
+multilingual embedding model is downloaded once and cached locally.
 
 Nothing in this list is metered, so a test run cannot consume a demo budget.
 That is a deliberate constraint: a source that costs money per call changes what
@@ -73,6 +79,16 @@ and the returned link is a Google redirect rather than the publisher's URL.
 publication time only. It does not fetch article bodies, and it makes no claim
 about the publisher's editorial standards — the index includes user-generated
 sources alongside established outlets.
+
+### Reddit
+
+Reddit's API terms restrict automated access and require a descriptive User-Agent
+and rate-limit compliance (100 requests/minute on OAuth). The collector sends a
+named User-Agent, stays well under the limit, and collects public posts only — no
+private subreddits, no messages, no account actions.
+
+**What this means:** the credential is issued to whoever registers the app, so it is
+attributable. Confirm the intended use is acceptable before operational deployment.
 
 ### GDELT
 

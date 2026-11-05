@@ -54,16 +54,34 @@ Given a topic and a date range, the module:
 
 ## Platforms
 
-| Platform | Kind | Access | Seeding |
-|---|---|---|---|
-| **YouTube** | social | `yt-dlp` keyword search + metadata, anonymous | keyword |
-| **Telegram** | social | Public `t.me/s/<channel>` web preview, anonymous | channel (via web search) |
-| **Mastodon** | social | Public `/api/v1/timelines/tag/`, anonymous | hashtag (derived from topic) |
-| **Google News** | news | Public RSS search, keyless | keyword |
+| Platform | Kind | Access | Seeding | Key |
+|---|---|---|---|---|
+| **YouTube** | social | `yt-dlp` keyword search + metadata | keyword | no |
+| **Telegram** | social | Public `t.me/s/<channel>` web preview | channel (via web search) | no |
+| **Mastodon** | social | Public `/api/v1/timelines/tag/` | hashtag (derived from topic) | no |
+| **Reddit** | social | Free OAuth app, read-only | keyword (global search) | yes, free |
+| **Google News** | news | Public RSS search | keyword | no |
 
-Three access models, all free: anonymous scraping of public surfaces, a public
-RSS index, and — where the network allows — the GDELT DOC API (off by default;
-see below).
+Four access models, all free: anonymous scraping of public surfaces, a public
+RSS index, a free OAuth app, and — where the network allows — the GDELT DOC API
+(off by default; see below).
+
+Reddit is the only source needing a credential. Register a **script** app at
+<https://www.reddit.com/prefs/apps> (free, instant) and set:
+
+```bash
+export REDDIT_CLIENT_ID=...
+export REDDIT_CLIENT_SECRET=...
+```
+
+Without them Reddit reports `unsupported` — not `empty`, because "I have no key"
+and "nobody posted" are different findings and the output should not confuse
+them. Use `--no-reddit` to skip it deliberately.
+
+Reddit's public JSON endpoints return a 403 bot-block from many networks; the
+OAuth API is the usable surface. That was verified from the target network
+before the adapter was written — the token endpoint answered with Reddit's own
+401 JSON, while `www.reddit.com/r/<sub>/new.json` returned a block page.
 
 Two of the social sources are **seeded** rather than keyword-indexed. Telegram
 channels are discovered by web search first; Mastodon is read by hashtag. A
@@ -308,6 +326,7 @@ src/socmint/
     youtube.py     # yt-dlp adapter
     telegram.py    # t.me/s parser + pagination
     mastodon.py    # public tag timelines, federated dedupe by uri
+    reddit.py      # OAuth client-credentials search
     news_rss.py    # Google News RSS search
     gdelt.py       # GDELT DOC 2.0 (optional, off by default)
   analysis/
@@ -333,7 +352,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 161 offline tests, 86% statement coverage.
+- 171 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

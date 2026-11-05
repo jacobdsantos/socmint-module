@@ -8,3 +8,6 @@ __pycache__/
 .coverage
 .playwright-mcp/
 .streamlit/secrets.toml
+
+# Never commit real credentials; .env.example documents the shape.
+.env
