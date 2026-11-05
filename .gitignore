@@ -1,6 +1,9 @@
 .venv/
 data/
 exports/
+# Deploy output. A case file embeds collected post text, which must not land in
+# the repository -- see docs/access-and-limitations.md.
+dist/
 __pycache__/
 *.pyc
 .pytest_cache/
