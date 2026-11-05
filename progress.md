@@ -102,7 +102,7 @@ conflict disinformation, impersonation/deepfake, hacktivist data leak.
 
 ## Day 5 — Verification: COMPLETE
 
-- [x] 198 tests passing, `ruff` clean
+- [x] 205 tests passing, `ruff` clean
 - [x] Statement coverage measured at 86%
 - [x] README, `docs/methodology.md`, `docs/access-and-limitations.md` written
 - [x] `docs/decisions.md`, `docs/validation.md`, `docs/demo-script.md` written
@@ -187,4 +187,34 @@ to what a reviewer needs rather than what the pipeline happens to produce.
   `docs/validation.md` #31.
 
 Verified with Playwright at 1440 and 768 across Assessment, Indicators,
-Coverage, and Evidence. 198 tests pass; ruff clean.
+Coverage, and Evidence. 205 tests pass; ruff clean.
+
+## Published case file — same design, whole case
+
+`socmint export-site` is the artifact that actually gets hosted: one 76 KB
+`index.html` with inline CSS/JS and no network at view time, deployable to
+Cloudflare Pages or Vercel with no build step. It had drifted from the dashboard
+— a different palette and three sections missing.
+
+- Rewritten against the dashboard's tokens: same navy, crimson signal colour,
+  mono for machine-generated values, terminal prompt in the masthead, stat tiles
+  with the crimson rule, key judgements with confidence chips.
+- Added the sections a published case needs and the old file did not have:
+  impersonation signals, claim review, spread (earliest observed plus
+  propagation edges), method notes, and a degraded-analysis banner.
+- Section order is document order, not dashboard order: evidence is an appendix
+  at the end rather than the fifth tab.
+- One filter box searches values, claims and posts together; each result group
+  carries its own `data-search` haystack so a row and its reason line hide as a
+  unit.
+- Repeated boilerplate is suppressed. Every `unknown` indicator carried the
+  identical "no signal either way in the post text", and every unreviewed claim
+  carried the identical auto-proposal rationale — twenty copies of one sentence
+  is noise, and the badge or section note already says it.
+- Added a print stylesheet: black on white, page-break rules, filter hidden. The
+  case file is a document and someone will print it to PDF.
+
+Verified by exporting a live run and reading it in a browser at 1440: all ten
+sections render, the filter takes 43 rows to 3 on "gmanews", no external
+resource requests (the only console error is a missing favicon). 205 tests pass;
+ruff clean.

@@ -230,11 +230,16 @@ wrangler pages deploy dist/case          # Cloudflare Pages
 vercel deploy dist/case --prod           # Vercel
 ```
 
-`index.html` is ~80 KB: CSS and JS inlined, data embedded, post text rendered
-with `textContent` so untrusted content can never become markup. It carries the
-assessment, indicators with roles, narratives, coordination, coverage and
-evidence — the same case, minus the controls a static page cannot offer. An
-existing case file is never overwritten.
+`index.html` is ~76 KB: CSS and JS inlined, no fonts, no CDN, no network at view
+time. It carries the whole case — assessment, impersonation signals, indicators
+with roles, narratives, coordination, claim review, spread, coverage, and the
+evidence table as an appendix — plus a filter box that searches values, claims
+and posts together. Post text is escaped on the way in, so untrusted content
+never becomes markup. A print stylesheet turns it into a legible black-on-white
+document for PDF. An existing case file is never overwritten.
+
+If you have no Vercel account, `vercel deploy dist/case --temporary` publishes a
+working link without logging in, and prints a claim URL to keep it.
 
 ### Inspect stored runs
 
@@ -398,7 +403,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 198 offline tests, 86% statement coverage.
+- 205 offline tests, 84% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

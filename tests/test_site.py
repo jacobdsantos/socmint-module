@@ -15,7 +15,11 @@ from socmint.analysis import assessment as assess_mod
 from socmint.models import (
     AnalysisBundle,
     CaseTemplate,
+    ClaimAssessment,
     DateRange,
+    EarliestObserved,
+    ImpersonationFinding,
+    ImpersonationSignal,
     Indicator,
     IndicatorKind,
     IndicatorRole,
@@ -23,6 +27,7 @@ from socmint.models import (
     PlatformReport,
     Post,
     Precision,
+    PropagationEdge,
     Run,
     StageStatus,
 )
@@ -118,3 +123,139 @@ def test_an_empty_case_still_renders(tmp_path) -> None:
     index = export_site(_run(), [], AnalysisBundle(), tmp_path / "empty")
     html = index.read_text(encoding="utf-8")
     assert "Evidence · 0 post(s)" in html
+
+
+# --- sections that only appear when the analysis produced something ----------
+
+
+def test_claims_render_and_are_searchable() -> None:
+    bundle = _bundle()
+    bundle.claims = [
+        ClaimAssessment(
+            claim_id="q001",
+            post_id="1",
+            platform=Platform.TELEGRAM,
+            claim_text="the bank collapsed overnight",
+            verdict="unreviewed",
+            rationale="Auto-proposed candidate. Not assessed.",
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "Claim review" in html
+    assert "the bank collapsed overnight" in html
+    assert 'data-search="the bank collapsed overnight unreviewed"' in html
+
+
+def test_an_unreviewed_claim_does_not_repeat_the_auto_rationale() -> None:
+    """The boilerplate is identical on every card; the section note covers it."""
+    bundle = _bundle()
+    bundle.claims = [
+        ClaimAssessment(
+            claim_id="q001",
+            post_id="1",
+            platform=Platform.TELEGRAM,
+            claim_text="claim",
+            verdict="unreviewed",
+            rationale="Auto-proposed candidate. Not assessed.",
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "Auto-proposed candidate" not in html
+
+
+def test_a_reviewed_claim_shows_its_rationale() -> None:
+    bundle = _bundle()
+    bundle.claims = [
+        ClaimAssessment(
+            claim_id="q001",
+            post_id="1",
+            platform=Platform.TELEGRAM,
+            claim_text="claim",
+            verdict="contradicted",
+            rationale="PAGASA's 06:00 bulletin reports no such system.",
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "PAGASA&#x27;s 06:00 bulletin" in html or "PAGASA's 06:00 bulletin" in html
+    assert "contradicted" in html
+
+
+def test_spread_renders_earliest_and_propagation() -> None:
+    bundle = _bundle()
+    bundle.earliest = [
+        EarliestObserved(
+            narrative_id="n001",
+            post_ids=["1"],
+            accounts=["acct"],
+            platforms=["telegram"],
+            observed_at=BASE,
+        )
+    ]
+    bundle.propagation = [
+        PropagationEdge(
+            edge_id="e001",
+            narrative_id="n001",
+            from_post="1",
+            to_post="2",
+            kind="inferred",
+            signal="shared_url",
+            seconds_apart=12.0,
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "Spread" in html
+    assert "n001" in html and "e001" in html
+    # An inferred edge must carry its caveat, not read as transmission.
+    assert "not transmission" in html
+
+
+def test_impersonation_renders_with_severity_and_caveats() -> None:
+    bundle = _bundle()
+    bundle.impersonation = [
+        ImpersonationFinding(
+            finding_id="imp001",
+            subject="Acme Bank",
+            post_ids=["1"],
+            severity="medium",
+            confidence="low",
+            signals=[
+                ImpersonationSignal(
+                    kind="lookalike_domain",
+                    detail="one edit from the real domain",
+                    weight=2.0,
+                    evidence=["acme-bank[.]example"],
+                )
+            ],
+            caveats=["string distance only; no registration check"],
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "imp001" in html and "Acme Bank" in html
+    assert "lookalike_domain" in html
+    assert "medium severity" in html
+    assert "no registration check" in html
+
+
+def test_a_boilerplate_unknown_reason_is_not_repeated_on_every_row() -> None:
+    bundle = _bundle()
+    bundle.indicators = [
+        Indicator(
+            kind=IndicatorKind.DOMAIN,
+            value="x.example",
+            defanged="x[.]example",
+            role=IndicatorRole.UNKNOWN,
+            role_reason="no signal either way in the post text",
+        )
+    ]
+    html = render(_run(), [_post()], bundle)
+    assert "x[.]example" in html
+    assert "no signal either way" not in html
+
+
+def test_method_notes_and_degraded_state_are_surfaced() -> None:
+    bundle = _bundle()
+    bundle.degraded = True
+    bundle.method_notes = ["embedding model unavailable; lexical grouping only"]
+    html = render(_run(), [_post()], bundle)
+    assert "Analysis degraded" in html
+    assert "lexical grouping only" in html

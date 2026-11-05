@@ -9,9 +9,17 @@ That is also the better demo artifact. A link an assessor can open beats a
 Streamlit process on a laptop, and it cannot fail mid-demo because a collector
 timed out.
 
+The file uses the same design tokens as the dashboard in ``app.py`` so the two
+read as one product: deep navy, crimson signal colour, monospace for anything
+machine-generated, and a terminal prompt in the masthead.
+
 Everything is inlined: CSS, a small amount of JS for filtering, and the data as
-JSON. No fonts, no CDNs, no network at view time. Post text is untrusted and is
-inserted with ``textContent`` only, never as HTML.
+markup. No fonts, no CDNs, no network at view time. Post text is untrusted and
+is escaped on the way in.
+
+Section order is the order a document is read in, which is not quite the
+dashboard's: the dashboard is a workbench where you jump between tabs, whereas a
+case file is read top to bottom and ends with the raw evidence as an appendix.
 """
 
 from __future__ import annotations
@@ -28,64 +36,147 @@ from .models import AnalysisBundle, IndicatorRole, Post, Run
 
 _CSS = """
 :root{
-  --bg:#070B22; --surface:#0C1132; --surface-2:#111735; --line:#1E2749;
-  --text:#E6E9F5; --muted:#8B94B8; --accent:#E8234A; --ok:#3FB950;
-  --warn:#D29922; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --void:#050818; --navy:#070B22; --navy2:#0C1132; --navy3:#111845;
+  --line:#1E2657; --line-hot:#2E3A7A;
+  --ink:#E6E9F5; --muted:#8A93BF; --dim:#5A6394;
+  --crimson:#E8234A; --crimson-soft:rgba(232,35,74,.12);
+  --amber:#F2A33C; --mint:#35D6A4;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
-header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px}
-.brand{font:600 22px/1 var(--mono);letter-spacing:-.5px}
-.brand span{color:var(--accent)}
-.tag{font:500 10px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;
-  color:var(--muted);margin-top:10px}
-.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.chip{border:1px solid var(--line);background:var(--surface);border-radius:4px;
-  padding:5px 9px;font:500 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}
-.chip.tlp{border-color:var(--accent);color:var(--accent)}
-.topic{font-size:26px;font-weight:600;margin:18px 0 4px;letter-spacing:-.4px}
+html,body{margin:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 82% -10%, rgba(232,35,74,.10), transparent 60%),
+    radial-gradient(900px 500px at 0% 0%, rgba(80,110,255,.12), transparent 55%),
+    var(--navy);
+  background-attachment:fixed;
+  color:var(--ink); font:15px/1.6 var(--sans);
+}
+.wrap{max-width:1180px;margin:0 auto;padding:36px 24px 96px}
+
+/* ---------- masthead ---------- */
+.masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+  padding-bottom:18px;border-bottom:1px solid var(--line)}
+.prompt{font-family:var(--mono);font-size:34px;font-weight:600;letter-spacing:-.03em;line-height:1}
+.prompt .sigil{color:var(--crimson)}
+.prompt .caret{display:inline-block;width:11px;height:26px;margin-left:4px;
+  background:var(--crimson);vertical-align:-3px;animation:blink 1.15s steps(1) infinite}
+@keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.prompt .caret{animation:none}}
+.mh-sub{font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--dim);
+  margin-top:9px;font-weight:600}
+.mh-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.topic{font-size:28px;font-weight:600;margin:22px 0 6px;letter-spacing:-.4px}
 .sub{color:var(--muted);font-size:13px}
-h2{font:600 11px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
-  color:var(--muted);margin:40px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px}
-.stat .n{font:600 26px/1 var(--mono);letter-spacing:-1px}
-.stat .k{font:500 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--muted);margin-top:8px}
-.stat.alert .n{color:var(--accent)}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;
-  padding:16px;margin-bottom:10px}
+
+/* ---------- badges ---------- */
+.tlp,.badge,.chip,.adm{font-family:var(--mono);font-size:10.5px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;padding:4px 9px;border-radius:3px;white-space:nowrap}
+.badge{color:var(--muted);border:1px solid var(--line-hot);background:rgba(17,24,69,.6)}
+.chip{border:1px solid var(--line-hot);color:var(--muted);background:transparent}
+.chip-high{color:#FF6B87;border-color:#7A1B2E;background:var(--crimson-soft)}
+.chip-moderate{color:var(--amber);border-color:#6B4A12;background:rgba(242,163,60,.10)}
+.chip-low{color:var(--muted);border-color:var(--line-hot)}
+.chip-mint{color:var(--mint);border-color:#14543F;background:rgba(53,214,164,.10)}
+.tlp{color:#fff;background:var(--crimson)}
+.tlp-clear{background:#3B4A8C}
+.tlp-green{background:#1E7A5A}
+.tlp-amber{background:#B8761C}
+.tlp-amber-strict{background:#C2540F}
+.tlp-red{background:var(--crimson)}
+.adm{color:var(--ink);border:1px solid var(--line-hot);background:var(--navy3);letter-spacing:.06em}
+.adm-a,.adm-b,.adm-c{border-color:#14543F;color:var(--mint)}
+.adm-d{border-color:#6B4A12;color:var(--amber)}
+.adm-e,.adm-f{border-color:#7A1B2E;color:#FF6B87}
+
+/* ---------- sections ---------- */
+h2{font:600 10px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--dim);
+  margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.note{color:var(--muted);font-size:12.5px;line-height:1.6;margin:0 0 16px}
+.caveat{color:var(--amber);font-size:12px;line-height:1.55}
+.empty{color:var(--muted);font-size:13px;padding:14px 0}
+.mono{font-family:var(--mono);font-size:12.5px}
+
+/* ---------- stat tiles ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:4px;
+  padding:14px 15px 13px;
+  background:linear-gradient(180deg,rgba(17,24,69,.85),rgba(12,17,50,.85))}
+.stat::before{content:"";position:absolute;left:0;top:0;width:2px;height:100%;
+  background:var(--crimson);opacity:.85}
+.stat .k{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.stat .v{font-family:var(--mono);font-size:27px;font-weight:600;line-height:1.15;margin-top:5px}
+.stat .s{font-size:10.5px;color:var(--muted);margin-top:3px}
+
+/* ---------- risk ---------- */
+.risk{border:1px solid #3A1530;border-radius:4px;padding:18px 20px;margin-bottom:18px;
+  background:linear-gradient(135deg,rgba(232,35,74,.14),rgba(12,17,50,.9) 55%)}
+.risk .k{font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:#FF8FA5;font-weight:700}
+.risk .v{font-family:var(--mono);font-size:44px;font-weight:600;line-height:1;margin:8px 0 2px}
+.risk .v span{font-size:15px;color:var(--dim)}
+.bar{height:3px;background:var(--navy3);border-radius:2px;overflow:hidden;margin-top:12px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--crimson),#FF7A93)}
+.risk .n{font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5}
+
+/* ---------- key judgements ---------- */
+.kj{border-left:2px solid var(--line-hot);padding:10px 0 10px 14px;margin:0 0 14px}
+.kj.hi{border-left-color:var(--crimson)}
+.kj .head{display:flex;gap:10px;align-items:center;margin-bottom:5px;flex-wrap:wrap}
+.kj .kid{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--dim)}
+.kj .body{font-size:14px;line-height:1.55}
+.kj .cav{color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:6px}
+
+/* ---------- cards ---------- */
+.card{background:var(--navy2);border:1px solid var(--line);border-radius:4px;
+  padding:15px 16px;margin-bottom:10px}
 .card .hd{display:flex;justify-content:space-between;gap:12px;align-items:baseline;
-  margin-bottom:8px;flex-wrap:wrap}
-.card .id{font:600 11px/1 var(--mono);letter-spacing:.1em;color:var(--accent)}
-.conf{font:500 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.caveat{color:var(--muted);font-size:12px;margin-top:8px;padding-left:12px;
-  border-left:2px solid var(--line)}
-.mono{font-family:var(--mono);font-size:13px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;font:500 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+  margin-bottom:7px;flex-wrap:wrap}
+.card .id{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--crimson)}
+
+/* ---------- indicators ---------- */
+.ioc{display:flex;gap:16px;align-items:baseline;font-family:var(--mono);font-size:12px;
+  background:var(--void);border:1px solid var(--line);border-radius:3px;padding:9px 11px;margin:5px 0}
+.ioc .val{flex:1 1 auto;min-width:0;word-break:break-all;line-height:1.45}
+.ioc .meta{flex:0 0 auto;color:var(--dim);font-size:9.5px;white-space:nowrap;
+  letter-spacing:.1em;text-transform:uppercase}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
+th{text-align:left;font:600 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dim);padding:8px 10px;border-bottom:1px solid var(--line)}
 td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 tr:last-child td{border-bottom:none}
-.badge{display:inline-block;padding:3px 7px;border-radius:3px;font:600 9px/1 var(--mono);
-  letter-spacing:.1em;text-transform:uppercase;border:1px solid}
-.b-ind{border-color:var(--accent);color:var(--accent)}
-.b-ref{border-color:var(--line);color:var(--muted)}
-.b-unk{border-color:var(--warn);color:var(--warn)}
-.b-ok{border-color:var(--ok);color:var(--ok)}
-.tools{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
-input[type=search]{background:var(--surface);border:1px solid var(--line);color:var(--text);
-  border-radius:4px;padding:8px 12px;font-size:13px;min-width:240px;font-family:inherit}
-input[type=search]:focus{outline:none;border-color:var(--accent)}
-.note{background:var(--surface-2);border-left:3px solid var(--warn);padding:12px 14px;
-  border-radius:0 4px 4px 0;font-size:13px;color:var(--muted);margin-bottom:16px}
-.empty{color:var(--muted);font-size:13px;padding:16px 0}
+
+/* ---------- search ---------- */
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0 4px}
+.tools-label{font:600 9.5px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);align-self:center}
+input[type=search]{background:var(--navy2);border:1px solid var(--line);color:var(--ink);
+  border-radius:4px;padding:9px 12px;font-size:13px;min-width:300px;font-family:inherit}
+input[type=search]:focus{outline:none;border-color:var(--crimson)}
+input[type=search]::placeholder{color:var(--dim)}
+
+a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+a:hover{border-color:var(--crimson)}
+
 footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);
-  color:var(--muted);font-size:11px;font-family:var(--mono);line-height:1.8}
-a{color:var(--text);text-decoration:none;border-bottom:1px solid var(--line)}
-a:hover{border-color:var(--accent)}
+  color:var(--dim);font-size:11px;font-family:var(--mono);line-height:1.9}
+
+/* ---------- print ---------- */
+@media print{
+  body{background:#fff;color:#111}
+  .wrap{max-width:none;padding:0}
+  .prompt,.topic,.stat .v,.card .id,.kj .body{color:#111}
+  .prompt .sigil,.prompt .caret,.tools{display:none}
+  .stat,.card,.risk,.ioc{background:#fff;border-color:#bbb}
+  .stat::before{display:none}
+  .note,.sub,.caveat,.mh-sub,td,th,.stat .k,.stat .s{color:#333}
+  a{color:#111;border:0}
+  h2{page-break-after:avoid;color:#111;border-color:#bbb}
+  tr,.card,.kj{page-break-inside:avoid}
+}
 """
 
 _JS = """
@@ -93,14 +184,30 @@ _JS = """
   var q=document.getElementById('q');
   if(!q) return;
   q.addEventListener('input',function(){
-    var v=q.value.toLowerCase();
+    var v=q.value.toLowerCase().trim();
     document.querySelectorAll('[data-search]').forEach(function(row){
-      var hit=!v||row.getAttribute('data-search').indexOf(v)>-1;
-      row.style.display=hit?'':'none';
+      row.style.display=(!v||row.getAttribute('data-search').indexOf(v)>-1)?'':'none';
     });
   });
 })();
 """
+
+_TLP_CLASS = {
+    "TLP:CLEAR": "tlp-clear",
+    "TLP:GREEN": "tlp-green",
+    "TLP:AMBER": "tlp-amber",
+    "TLP:AMBER+STRICT": "tlp-amber-strict",
+    "TLP:RED": "tlp-red",
+}
+
+_VERDICT_CLASS = {
+    "supported": "chip-mint",
+    "contradicted": "chip-high",
+    "mixed": "chip-moderate",
+    "unverified": "chip-low",
+    "not_checkable": "chip-low",
+    "unreviewed": "chip-low",
+}
 
 
 def _e(value: object) -> str:
@@ -125,26 +232,57 @@ def _fmt_counts(counts: dict[str, int]) -> str:
     return " · ".join(parts)
 
 
+def _chip(text: object, cls: str = "") -> str:
+    return f'<span class="chip {cls}">{_e(text)}</span>'
+
+
+def _adm(code: str | None) -> str:
+    # An ungraded post gets a bare dash, not a bordered badge: a small outlined
+    # box in a table column reads as an empty checkbox.
+    if not code:
+        return '<span style="color:var(--dim)">—</span>'
+    return f'<span class="adm adm-{_e(code[0].lower())}">{_e(code)}</span>'
+
+
+def _search_blob(*values: object) -> str:
+    """Lowercased haystack for the client-side filter. Escaped like any attribute."""
+    return _e(" ".join(str(v) for v in values if v).lower())
+
+
 # ---------------------------------------------------------------------------
 # Sections
 # ---------------------------------------------------------------------------
 
 
-def _header(run: Run, posts: list[Post]) -> str:
+def _header(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
     dated = sum(1 for p in posts if p.published_at)
+    tlp_cls = _TLP_CLASS.get(str(run.tlp), "tlp-amber")
+    degraded = (
+        '<div class="note" style="border-left:3px solid var(--amber);padding-left:12px">'
+        "<b>Analysis degraded.</b> The multilingual embedding model was unavailable; "
+        "groups are lexical only and cross-language grouping is not claimed.</div>"
+        if bundle.degraded
+        else ""
+    )
     return f"""
 <header>
-  <div class="brand">&gt; socmint<span>.</span></div>
-  <div class="tag">Social threat intelligence · case file</div>
+  <div class="masthead">
+    <div>
+      <div class="prompt"><span class="sigil">&gt;</span> socmint<span class="caret"></span></div>
+      <div class="mh-sub">Social threat intelligence · case file</div>
+    </div>
+    <div class="mh-right">
+      <span class="tlp {tlp_cls}">{_e(run.tlp)}</span>
+      <span class="badge">case · {_e(str(run.case_template).replace("_", " "))}</span>
+      <span class="badge">{_e(run.run_id)}</span>
+    </div>
+  </div>
   <div class="topic">{_e(run.topic)}</div>
   <div class="sub">Window {_e(run.window.start.date())} → {_e(run.window.end.date())} UTC ·
-    {len(posts)} post(s) collected · {dated} dated</div>
-  <div class="meta">
-    <span class="chip tlp">{_e(run.tlp)}</span>
-    <span class="chip">{_e(str(run.case_template).replace("_", " "))}</span>
-    <span class="chip">{_e(run.run_id)}</span>
-    <span class="chip">status {_e(run.status)}</span>
-  </div>
+    {len(posts)} post(s) collected · {dated} dated · status {_e(run.status)}</div>
+  {degraded}
+  <div class="tools"><span class="tools-label">filter</span>
+    <input type="search" id="q" placeholder="values, claims, evidence"></div>
 </header>"""
 
 
@@ -152,66 +290,138 @@ def _assessment(bundle: AnalysisBundle) -> str:
     a = bundle.assessment
     if a is None:
         return ""
+
+    actionable = sum(1 for i in bundle.indicators if i.role is IndicatorRole.INDICATOR)
+    unreviewed = sum(1 for c in bundle.claims if c.verdict == "unreviewed")
+    stats = f"""
+<div class="stats">
+  <div class="stat"><div class="k">Key judgements</div><div class="v">{len(a.key_judgements)}</div>
+    <div class="s">confidence stated on each</div></div>
+  <div class="stat"><div class="k">Indicators</div><div class="v">{actionable}</div>
+    <div class="s">references excluded</div></div>
+  <div class="stat"><div class="k">Coordination</div><div class="v">{len(bundle.coordination)}</div>
+    <div class="s">candidates · not verdicts</div></div>
+  <div class="stat"><div class="k">Claims</div><div class="v">{len(bundle.claims)}</div>
+    <div class="s">{unreviewed} unreviewed</div></div>
+</div>"""
+
     judgements = "".join(
-        f"""<div class="card">
-          <div class="hd"><span class="id">{_e(k.judgement_id)}</span>
-            <span class="conf">{_e(k.confidence)} confidence</span></div>
-          <div>{_e(k.statement)}</div>
-          {"".join(f'<div class="caveat">↳ {_e(c)}</div>' for c in k.caveats)}
+        f"""<div class="kj{' hi' if k.confidence == 'high' else ''}">
+          <div class="head"><span class="kid">{_e(k.judgement_id)}</span>
+            {_chip(f"{k.confidence} confidence", _conf_class(k.confidence))}</div>
+          <div class="body">{_e(k.statement)}</div>
+          {"".join(f'<div class="cav">↳ {_e(c)}</div>' for c in k.caveats)}
         </div>"""
         for k in a.key_judgements
     )
     factors = "".join(f'<div class="caveat">· {_e(f)}</div>' for f in a.risk_factors)
+    caveats = "".join(f'<div class="caveat">↳ {_e(c)}</div>' for c in a.caveats)
+
     return f"""
 <h2>Assessment</h2>
-<div class="stats">
-  <div class="stat alert"><div class="n">{a.risk_score}</div>
-    <div class="k">Triage risk / 100</div></div>
-  <div class="stat"><div class="n">{len(a.key_judgements)}</div>
-    <div class="k">Key judgements</div></div>
-  <div class="stat"><div class="n">{len(bundle.indicators)}</div>
-    <div class="k">Technical values</div></div>
-  <div class="stat"><div class="n">{len(bundle.coordination)}</div>
-    <div class="k">Coordination groups</div></div>
+{stats}
+<div class="risk">
+  <div class="k">Triage risk · additive heuristic</div>
+  <div class="v">{a.risk_score}<span>/100</span></div>
+  <div class="bar"><i style="width:{min(max(a.risk_score, 0), 100)}%"></i></div>
+  <div class="n">Not a probability. It answers which run to read first, and can be
+  recomputed by hand from the factors below — disagree with any line.</div>
 </div>
-<div class="note">Risk is an additive triage heuristic, not a probability. It answers
-which run to read first, and can be recomputed by hand from the factors below.</div>
 {judgements}
-<div class="card"><div class="hd"><span class="id">risk factors</span></div>{factors}</div>"""
+<div class="card"><div class="hd"><span class="id">risk factors</span></div>{factors or
+  '<div class="note">No risk factors recorded.</div>'}</div>
+{_impersonation(bundle)}
+<div class="card"><div class="hd"><span class="id">case caveats</span></div>
+  {caveats or '<div class="note">No case-level caveats.</div>'}</div>"""
+
+
+def _conf_class(confidence: str) -> str:
+    return {"high": "chip-high", "moderate": "chip-moderate", "medium": "chip-moderate"}.get(
+        confidence, "chip-low"
+    )
+
+
+def _impersonation(bundle: AnalysisBundle) -> str:
+    if not bundle.impersonation:
+        return ""
+    cards = []
+    for finding in bundle.impersonation:
+        sev = {"high": "chip-high", "medium": "chip-moderate", "low": "chip-low"}.get(
+            finding.severity, "chip-low"
+        )
+        signals = "".join(
+            f"""<div class="kj"><div class="head"><span class="kid">{_e(s.kind)}</span>
+              {_chip(f"weight {s.weight:g}")}</div>
+              <div class="body">{_e(s.detail)}</div>
+              {"".join(f'<div class="cav">“{_e(item)}”</div>' for item in s.evidence[:2])}
+            </div>"""
+            for s in finding.signals
+        )
+        caveats = "".join(f'<div class="caveat">↳ {_e(c)}</div>' for c in finding.caveats)
+        cards.append(
+            f"""<div class="card">
+              <div class="hd"><span class="id">{_e(finding.finding_id)}</span>
+                <span>{_chip(finding.severity + " severity", sev)}
+                  {_chip(finding.confidence + " confidence", _conf_class(finding.confidence))}
+                  {_chip(f"{len(finding.post_ids)} posts")}</span></div>
+              <div><b>{_e(finding.subject)}</b></div>
+              {signals}{caveats}
+            </div>"""
+        )
+    return f"""
+<h2>Impersonation &amp; brand abuse</h2>
+<div class="note">Signals are co-occurrence in post text, not proof of impersonation.
+Lookalike domains are string-distance leads only — ownership, hosting and content
+were not checked.</div>
+{"".join(cards)}"""
 
 
 def _indicators(bundle: AnalysisBundle) -> str:
     if not bundle.indicators:
-        return ""
+        return """
+<h2>Indicators</h2>
+<div class="empty">No technical values were extracted from this sample.</div>"""
     rows = []
     for ind in bundle.indicators:
         role = str(ind.role)
-        cls = {"indicator": "b-ind", "reference": "b-ref"}.get(role, "b-unk")
+        cls = {"indicator": "chip-high", "reference": "chip-low"}.get(role, "chip-moderate")
+        # The wrapper carries data-search so the filter hides the reason line
+        # with its value, rather than orphaning it. An "unknown" role carries a
+        # boilerplate reason identical on every row, so it is dropped: the badge
+        # already says it, and twenty copies of the same sentence is noise.
+        reason = (
+            f'<div style="color:var(--dim);font-size:11.5px;margin:-2px 0 10px 2px">'
+            f"↳ {_e(ind.role_reason)}</div>"
+            if role != "unknown"
+            else ""
+        )
         rows.append(
-            f"""<tr data-search="{_e((ind.defanged + ' ' + ind.value).lower())}">
-              <td class="mono">{_e(ind.defanged)}</td>
-              <td><span class="badge {cls}">{_e(role)}</span></td>
-              <td class="sub">{_e(ind.kind)}</td>
-              <td class="sub">{_e(ind.role_reason)}</td>
-              <td class="sub">{len(ind.post_ids)}</td>
-            </tr>"""
+            f"""<div data-search="{_search_blob(ind.defanged, ind.value, ind.kind, role)}">
+              <div class="ioc">
+                <span class="val">{_e(ind.defanged)}</span>
+                <span class="meta">{_chip(role, cls)} {_e(ind.kind)} ·
+                  {len(ind.post_ids)} post(s)</span>
+              </div>{reason}
+            </div>"""
         )
     actionable = sum(1 for i in bundle.indicators if i.role is IndicatorRole.INDICATOR)
     refs = sum(1 for i in bundle.indicators if i.role is IndicatorRole.REFERENCE)
     return f"""
 <h2>Indicators</h2>
-<div class="stats">
-  <div class="stat alert"><div class="n">{actionable}</div><div class="k">Indicators</div></div>
-  <div class="stat"><div class="n">{refs}</div><div class="k">Cited references</div></div>
-  <div class="stat"><div class="n">{len(bundle.indicators)}</div><div class="k">Total values</div></div>
-</div>
 <div class="note">A mentioned value is not evidence of compromise. <b>indicator</b> means
 the post presents it as an artefact of compromise; <b>reference</b> means cited
-documentation or a vendor advisory; <b>unknown</b> means the post gives no signal.
-Nothing here was checked against reputation or hosting data. All values are defanged.</div>
-<div class="tools"><input type="search" id="q" placeholder="Filter values…"></div>
-<table><thead><tr><th>Value</th><th>Role</th><th>Kind</th><th>Why</th><th>Posts</th></tr></thead>
-<tbody>{''.join(rows)}</tbody></table>"""
+documentation, a vendor advisory or a research outlet; <b>unknown</b> means the post
+gives no signal. Nothing here was checked against reputation, registration or hosting
+data. All values are defanged.</div>
+<div class="stats">
+  <div class="stat"><div class="k">Indicators</div><div class="v">{actionable}</div>
+    <div class="s">actionable</div></div>
+  <div class="stat"><div class="k">Cited references</div><div class="v">{refs}</div>
+    <div class="s">excluded from the set</div></div>
+  <div class="stat"><div class="k">Total values</div><div class="v">{len(bundle.indicators)}</div>
+    <div class="s">extracted</div></div>
+</div>
+{''.join(rows)}"""
 
 
 def _narratives(bundle: AnalysisBundle) -> str:
@@ -220,10 +430,12 @@ def _narratives(bundle: AnalysisBundle) -> str:
     cards = "".join(
         f"""<div class="card">
           <div class="hd"><span class="id">{_e(n.narrative_id)}</span>
-            <span class="conf">{_e(_fmt_framing(n.framing))}</span></div>
+            {_chip(_fmt_framing(n.framing),
+                   "chip-high" if str(n.framing) != "none" else "chip-low")}</div>
           <div><b>{_e(n.label)}</b></div>
           <div class="sub">{len(n.member_ids)} post(s) · {_e(_fmt_counts(n.platform_counts))}</div>
-          {"".join(f'<div class="caveat">↳ {_e(e)}</div>' for e in n.framing_evidence[:4])}
+          {"".join(f'<div class="cav" style="color:var(--dim);font-size:11.5px">↳ {_e(e)}</div>'
+                   for e in n.framing_evidence[:4])}
         </div>"""
         for n in bundle.narratives
     )
@@ -243,10 +455,13 @@ negative result for this sample only; it does not show coordination was absent.<
     cards = "".join(
         f"""<div class="card">
           <div class="hd"><span class="id">{_e(g.group_id)}</span>
-            <span class="conf">{_e(str(g.confidence).replace("_", " "))} ·
-              {len(g.episodes)} episode(s) · baseline {_e(g.baseline_episodes)}</span></div>
+            <span>{_chip(str(g.confidence).replace("_", " "))}
+              {_chip(f"{len(g.episodes)} episode(s)")}
+              {_chip(f"baseline {g.baseline_episodes}")
+               if g.baseline_episodes is not None else ""}</span></div>
           <div class="mono">{_e(", ".join(g.account_ids))}</div>
-          {"".join(f'<div class="caveat">↳ {_e(b)}</div>' for b in g.benign_explanations[:3])}
+          {"".join(f'<div class="cav" style="color:var(--dim);font-size:11.5px">↳ {_e(b)}</div>'
+                   for b in g.benign_explanations[:3])}
         </div>"""
         for g in bundle.coordination
     )
@@ -257,11 +472,114 @@ not a probability, not a bot label, and not evidence of shared ownership or inte
 {cards}"""
 
 
+def _claims(bundle: AnalysisBundle, by_id: dict[str, Post]) -> str:
+    if not bundle.claims:
+        return """
+<h2>Claim review</h2>
+<div class="empty">No claim candidates met the extraction criteria in this sample.</div>"""
+    cards = []
+    for claim in bundle.claims:
+        post = by_id.get(claim.post_id)
+        cls = _VERDICT_CLASS.get(claim.verdict, "chip-low")
+        source = ""
+        if post is not None:
+            source = (
+                f'<div class="sub" style="margin-top:6px">{_e(post.platform)} · '
+                f'{_e(post.author_name)} · {_e(_fmt_dt(post.published_at))} · '
+                f'<a href="{_e(post.url)}">source</a></div>'
+            )
+        evidence = ""
+        if claim.evidence:
+            evidence = (
+                '<div class="cav" style="color:var(--dim);font-size:11.5px;margin-top:8px">'
+                "candidate evidence (unverified):</div>"
+                + "".join(
+                    f'<div class="cav" style="color:var(--dim);font-size:11.5px">· '
+                    f'<a href="{_e(item.url)}">{_e(item.title or item.url)}</a></div>'
+                    for item in claim.evidence[:4]
+                )
+            )
+        # An unreviewed claim's "rationale" is the auto-proposal boilerplate,
+        # repeated identically on every card. The section note already says
+        # automation assigns no verdict, so it is suppressed until a human writes
+        # a real one.
+        rationale = (
+            f'<div class="cav" style="color:var(--amber);font-size:11.5px;margin-top:8px">'
+            f"rationale: {_e(claim.rationale)}</div>"
+            if claim.rationale and claim.verdict != "unreviewed"
+            else ""
+        )
+        cards.append(
+            f"""<div class="card" data-search="{_search_blob(claim.claim_text, claim.verdict)}">
+              <div class="hd"><span class="id">{_e(claim.claim_id)}</span>
+                {_chip(claim.verdict.replace("_", " "), cls)}</div>
+              <div>{_e(claim.claim_text)}</div>
+              {source}{evidence}{rationale}
+            </div>"""
+        )
+    unreviewed = sum(1 for c in bundle.claims if c.verdict == "unreviewed")
+    return f"""
+<h2>Claim review</h2>
+<div class="note">Automation proposes claims and can retrieve candidate evidence; it
+never assigns a verdict. A verdict requires a human who has read the source.
+{unreviewed} of {len(bundle.claims)} are still unreviewed.</div>
+{''.join(cards)}"""
+
+
+def _spread(bundle: AnalysisBundle) -> str:
+    if not bundle.earliest and not bundle.propagation:
+        return ""
+    parts = []
+    if bundle.earliest:
+        rows = "".join(
+            f"""<tr><td class="mono">{_e(e.narrative_id)}</td>
+              <td class="sub">{_e(_fmt_dt(e.observed_at))}</td>
+              <td class="sub">{_e(", ".join(e.accounts))}</td>
+              <td class="sub">{_e(", ".join(e.platforms))}</td>
+              <td>{len(e.post_ids)}</td></tr>"""
+            for e in bundle.earliest
+        )
+        parts.append(
+            f"""<div class="card"><div class="hd"><span class="id">earliest observed</span></div>
+            <table><thead><tr><th>Narrative</th><th>First observed</th><th>Accounts</th>
+            <th>Platforms</th><th>Posts</th></tr></thead><tbody>{rows}</tbody></table>
+            <div class="caveat">↳ {_e(bundle.earliest[0].caveat)}</div></div>"""
+        )
+    if bundle.propagation:
+        rows = "".join(
+            f"""<tr><td class="mono">{_e(e.edge_id)}</td><td class="sub">{_e(e.narrative_id)}</td>
+              <td class="sub">{_e(e.from_post)} → {_e(e.to_post)}</td>
+              <td>{_chip(e.kind)}</td><td class="sub">{_e(e.signal)}</td>
+              <td class="sub">{_e(round(e.seconds_apart, 1) if e.seconds_apart is not None else "—")}</td>
+            </tr>"""
+            for e in bundle.propagation
+        )
+        inferred = sum(1 for e in bundle.propagation if e.kind == "inferred")
+        note = (
+            f'<div class="caveat">↳ {inferred} inferred edge(s) are associations, not '
+            "transmission. Both posts may copy a third source outside the collected sample.</div>"
+            if inferred
+            else ""
+        )
+        parts.append(
+            f"""<div class="card"><div class="hd"><span class="id">propagation edges</span></div>
+            <table><thead><tr><th>Edge</th><th>Narrative</th><th>From → to</th><th>Kind</th>
+            <th>Signal</th><th>Seconds</th></tr></thead><tbody>{rows}</tbody></table>{note}</div>"""
+        )
+    return f"""
+<h2>Spread</h2>
+<div class="note">Earliest <em>observed in this sample</em>, never the true origin.
+Explicit links come from the platform; inferred links are content-and-chronology
+associations only.</div>
+{"".join(parts)}"""
+
+
 def _coverage(run: Run) -> str:
     rows = "".join(
         f"""<tr><td class="mono">{_e(r.platform)}</td><td class="sub">{_e(r.discovery)}</td>
           <td class="sub">{_e(r.retrieval)}</td><td>{r.sources_found}</td>
-          <td>{r.posts_retrieved}</td><td>{r.posts_in_range}</td></tr>"""
+          <td>{r.posts_retrieved}</td><td>{r.posts_in_range}</td>
+          <td>{"✓" if r.truncated else "—"}</td></tr>"""
         for r in run.platforms
     )
     return f"""
@@ -270,18 +588,18 @@ def _coverage(run: Run) -> str:
 within its caps, not that the platform was exhausted. Empty does not mean nothing
 was posted.</div>
 <table><thead><tr><th>Platform</th><th>Discovery</th><th>Retrieval</th><th>Sources</th>
-<th>Posts</th><th>In window</th></tr></thead><tbody>{rows}</tbody></table>"""
+<th>Posts</th><th>In window</th><th>Truncated</th></tr></thead><tbody>{rows}</tbody></table>"""
 
 
 def _evidence(posts: list[Post], limit: int = 60) -> str:
     ordered = sorted(posts, key=lambda p: p.published_at or p.collected_at, reverse=True)[:limit]
     rows = "".join(
-        f"""<tr data-search="{_e(((p.text or '') + ' ' + (p.author_name or '')).lower())}">
+        f"""<tr data-search="{_search_blob(p.text, p.title, p.author_name, p.platform)}">
           <td class="sub mono">{_e(_fmt_dt(p.published_at))}</td>
           <td class="mono">{_e(p.platform)}</td>
           <td class="sub">{_e(p.author_name)}</td>
           <td>{_e((p.text or "")[:220])}</td>
-          <td class="sub mono">{_e(p.admiralty.code if p.admiralty else "—")}</td>
+          <td>{_adm(p.admiralty.code if p.admiralty else None)}</td>
         </tr>"""
         for p in ordered
     )
@@ -293,6 +611,15 @@ untrusted data, rendered as text. Admiralty grades are provisional proxies.</div
 <th>Adm.</th></tr></thead><tbody>{rows}</tbody></table>"""
 
 
+def _methods(bundle: AnalysisBundle) -> str:
+    if not bundle.method_notes:
+        return ""
+    items = "".join(f'<div class="note">· {_e(note)}</div>' for note in bundle.method_notes)
+    return f"""
+<h2>Method notes</h2>
+{items}"""
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -300,15 +627,19 @@ untrusted data, rendered as text. Admiralty grades are provisional proxies.</div
 
 def render(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
     """Render one run as a self-contained HTML document."""
+    by_id = {p.identity: p for p in posts}
     body = "".join(
         [
-            _header(run, posts),
+            _header(run, posts, bundle),
             _assessment(bundle),
             _indicators(bundle),
             _narratives(bundle),
             _coordination(bundle),
+            _claims(bundle, by_id),
+            _spread(bundle),
             _coverage(run),
             _evidence(posts),
+            _methods(bundle),
         ]
     )
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
