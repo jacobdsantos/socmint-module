@@ -76,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="skip Google News; collect social sources only")
     run.add_argument("--no-reddit", action="store_true",
                      help="skip Reddit (needs REDDIT_CLIENT_ID/SECRET)")
+    run.add_argument("--x", action="store_true", dest="enable_x",
+                     help="include X via Xpoz (metered; also needs --allow-spend)")
+    run.add_argument("--allow-spend", action="store_true",
+                     help="permit spending credits; off unless given")
+    run.add_argument("--max-credits", type=int, default=None,
+                     help="ceiling for this run (default from policy)")
     run.add_argument("--gdelt", action="store_true",
                      help="also query GDELT (IP rate-limited; off by default)")
 
@@ -94,6 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list", help="list stored runs")
     listing.add_argument("--data-dir", default="data")
+
+    credits = sub.add_parser(
+        "credits", help="show metered-API balance and spend history"
+    )
+    credits.add_argument("--data-dir", default="data")
+    credits.add_argument("--limit", type=int, default=20)
 
     return parser
 
@@ -151,6 +163,35 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{run.run_id}  {run.status:<8} {run.topic}")
         return 0
 
+    if args.command == "credits":
+        from .spend import CreditLedger
+
+        config = AppConfig(data_dir=Path(args.data_dir))
+        db = Path(args.data_dir) / "socmint.db"
+        if not db.exists():
+            print(f"no ledger at {db}")
+            return 0
+        with Store(db) as store:
+            ledger = CreditLedger(store, config.credits)
+            summary = ledger.summary()
+            print(f"provider            {summary['provider']}")
+            print(f"allowance           {summary['allowance']}")
+            print(f"spent               {summary['spent']}")
+            print(f"remaining           {summary['remaining']}")
+            print(f"demo reserve        {summary['demo_reserve']}")
+            print(f"available to test   {summary['available_for_testing']}")
+            print(f"per-run ceiling     {summary['max_per_run']}")
+            print(f"spending enabled    {summary['allow_spend']}")
+            rows = ledger.history(limit=args.limit)
+            if rows:
+                print("\nrecent entries")
+                for row in rows:
+                    print(
+                        f"  {row['ts'][:19]}  {row['units']:>4}  "
+                        f"{row['run_id'] or '-':<24} {row['note'] or ''}"
+                    )
+        return 0
+
     if args.command == "demo":
         from .demo import run_demo
 
@@ -206,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
 
         config = replace(config, budgets=replace(config.budgets, max_posts_per_run=args.max_posts))
-    if args.no_news or args.no_reddit or args.gdelt:
+    if args.no_news or args.no_reddit or args.gdelt or args.enable_x:
         from dataclasses import replace
 
         config = replace(
@@ -215,9 +256,19 @@ def main(argv: list[str] | None = None) -> int:
                 config.budgets,
                 enable_google_news=not args.no_news,
                 enable_reddit=not args.no_reddit,
+                enable_x=args.enable_x,
                 enable_gdelt=args.gdelt,
             ),
         )
+    if args.allow_spend or args.max_credits is not None:
+        from dataclasses import replace
+
+        credits = config.credits
+        if args.allow_spend:
+            credits = replace(credits, allow_spend=True)
+        if args.max_credits is not None:
+            credits = replace(credits, max_per_run=max(0, args.max_credits))
+        config = replace(config, credits=credits)
     if args.offline_analysis:
         from dataclasses import replace
 

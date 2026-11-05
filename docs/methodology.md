@@ -60,6 +60,10 @@ window start; a very old window under heavy recent activity can exhaust the
 page budget first, which is reported as truncation. Relevance is decided per
 post from the title and body.
 
+**X (optional, metered).** One `search_posts` call through the Xpoz SDK,
+bounded by the requested dates and the post budget, gated by the credit
+ledger (see `docs/decisions.md` §17). Relevance is decided per post.
+
 **Google News.** A single keyless RSS query, phrase-quoted with aliases OR'd.
 The feed is reverse-chronological and capped near 100 items, so the request asks
 for the whole lookback window and the exact window is applied locally

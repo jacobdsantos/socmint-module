@@ -47,6 +47,9 @@ class Budgets:
     enable_google_news: bool = True
     # Reddit needs a free OAuth app; enabled only when credentials exist.
     enable_reddit: bool = True
+    # X is metered. Off by default on top of CreditPolicy.allow_spend:
+    # two explicit gates, because this is the only source that costs money.
+    enable_x: bool = False
     google_news_max_items: int = 100
     user_agent: str = (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -72,6 +75,51 @@ class AnalysisSettings:
     baseline_shuffles: int = 5
     max_narratives: int = 60
     force_lexical: bool = False
+
+
+@dataclass(frozen=True)
+class CreditPolicy:
+    """How much of a metered API this module is allowed to consume.
+
+    The default is deliberately paranoid: spending is **off** unless someone
+    turns it on, and even then a reserve is held back that no amount of testing
+    can touch. A prototype that can silently drain its own demo budget is worse
+    than one that refuses to run.
+    """
+
+    #: Total credits on the account (Xpoz free tier is a one-time 500).
+    allowance: int = 500
+    #: Held back for the demo. Testing stops here, not at zero.
+    demo_reserve: int = 200
+    #: Ceiling for a single run, so one runaway query cannot eat the rest.
+    max_per_run: int = 40
+    #: Credits one search call costs (Xpoz: 2 per Twitter query).
+    cost_per_call: int = 2
+    #: Off by default. Nothing spends until this is explicitly set.
+    allow_spend: bool = False
+
+    @property
+    def testable(self) -> int:
+        return max(0, self.allowance - self.demo_reserve)
+
+
+@dataclass(frozen=True)
+class XpozCredentials:
+    """Xpoz API key, read from the environment.
+
+    Xpoz is the only metered source. It is not required: without a key the
+    platform reports ``unsupported`` and every other collector still runs.
+    """
+
+    api_key: str | None = None
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key)
+
+
+def _xpoz_credentials_from_env() -> XpozCredentials:
+    return XpozCredentials(api_key=os.environ.get("XPOZ_API_KEY") or None)
 
 
 @dataclass(frozen=True)
@@ -106,6 +154,8 @@ class AppConfig:
     data_dir: Path = DEFAULT_DATA_DIR
     offline: bool = False
     reddit: RedditCredentials = field(default_factory=_reddit_credentials_from_env)
+    xpoz: XpozCredentials = field(default_factory=_xpoz_credentials_from_env)
+    credits: CreditPolicy = field(default_factory=CreditPolicy)
 
     def run_dir(self, run_id: str) -> Path:
         return self.data_dir / "runs" / run_id

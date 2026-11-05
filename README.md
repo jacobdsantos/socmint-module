@@ -60,6 +60,7 @@ Given a topic and a date range, the module:
 | **Telegram** | social | Public `t.me/s/<channel>` web preview | channel (via web search) | no |
 | **Mastodon** | social | Public `/api/v1/timelines/tag/` | hashtag (derived from topic) | no |
 | **Reddit** | social | Free OAuth app, read-only | keyword (global search) | yes, free |
+| **X** | social | Xpoz API, **metered** | keyword | yes, paid credits |
 | **Google News** | news | Public RSS search | keyword | no |
 
 Four access models, all free: anonymous scraping of public surfaces, a public
@@ -77,6 +78,30 @@ export REDDIT_CLIENT_SECRET=...
 Without them Reddit reports `unsupported` — not `empty`, because "I have no key"
 and "nobody posted" are different findings and the output should not confuse
 them. Use `--no-reddit` to skip it deliberately.
+
+### X is metered — and that is enforced in code
+
+X is the only source that costs money, so it has two explicit gates on top of
+each other:
+
+```bash
+export XPOZ_API_KEY=...
+pip install -e ".[xpoz]"
+socmint run --topic "..." --start ... --end ... --x --allow-spend
+```
+
+Without `--x` it is not collected. With `--x` but no `--allow-spend` it reports
+`blocked_policy` and spends nothing. With both, a persistent ledger holds back a
+**200-credit demo reserve** that testing cannot cross and caps each run at 40
+credits. Check the balance any time:
+
+```bash
+socmint credits
+```
+
+That reserve exists because Xpoz's free tier is a one-time grant of 500 credits
+at 2 per query — there is no monthly reset. A prototype that spends freely while
+being tested has no credits left on demo day.
 
 Reddit's public JSON endpoints return a 403 bot-block from many networks; the
 OAuth API is the usable surface. That was verified from the target network
@@ -327,6 +352,7 @@ src/socmint/
     telegram.py    # t.me/s parser + pagination
     mastodon.py    # public tag timelines, federated dedupe by uri
     reddit.py      # OAuth client-credentials search
+    xpoz.py        # X via Xpoz SDK, gated by the credit ledger
     news_rss.py    # Google News RSS search
     gdelt.py       # GDELT DOC 2.0 (optional, off by default)
   analysis/
@@ -339,6 +365,7 @@ src/socmint/
     threat.py      # threat framing + impersonation/brand abuse
     assessment.py  # key judgements + itemised risk score
   presets.py       # case templates (lens, not engine)
+  spend.py         # credit ledger + spend policy for metered APIs
 app.py             # Streamlit dashboard
 ```
 
@@ -352,7 +379,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 171 offline tests, 86% statement coverage.
+- 192 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

@@ -415,3 +415,45 @@ separately rather than blended into the social evidence.
 **News records are metadata only.** Headline, publisher domain, publication
 time, permalink. The article body is never fetched, so `evidence_quality` is
 `partial` and no claim is verified from a news record.
+
+---
+
+## 17. A metered source gets a ledger, not a warning
+
+**Decision.** X is collected through Xpoz behind a persistent, append-only
+credit ledger. Spending is disabled unless explicitly enabled, a demo reserve is
+held back that testing cannot cross, and each run has its own ceiling.
+
+**Why this is a code problem, not a documentation problem.** Xpoz's free tier is
+a **one-time** 500 credits at 2 credits per Twitter query. There is no monthly
+reset. A prototype that spends freely while being tested is a prototype that has
+no credits on demo day, and a warning in a README does not prevent that.
+
+**The three gates.**
+
+| Gate | Default | What it prevents |
+|---|---|---|
+| `enable_x` | false | X is not collected at all unless `--x` is passed |
+| `allow_spend` | false | Even with `--x`, nothing is charged without `--allow-spend` |
+| `demo_reserve` | 200 of 500 | Testing stops at 300 credits, whatever the run count |
+
+Plus `max_per_run` (40 credits, i.e. 20 queries) so a single runaway run cannot
+consume the rest.
+
+**Charge before, refund after.** The ledger charges before the call and refunds
+if it fails. Charging after success would under-count if the process died
+mid-request, and under-counting is the direction that overspends. Refunds are
+appended as negative entries rather than deleting the charge, because a ledger
+you can edit in place is not a ledger.
+
+**The ledger is SQLite, not memory.** An in-process counter resets on every run,
+which makes it decorative. Spend survives restarts and is visible with
+`socmint credits`.
+
+**Unavailable is still not empty.** No key, no SDK, or a refused spend report
+`unsupported` / `blocked_policy` with the reason. A missing key must never look
+like "nobody posted about this on X".
+
+**One billable call per run.** `ResponseType.FAST` returns a single page, so the
+cost of a run is known before it starts rather than discovered afterwards.
+

@@ -12,6 +12,7 @@ read before using the tool on anything other than public research.
 | Telegram | Public web preview `t.me/s/<channel>` | No | Free |
 | Mastodon | Public tag timeline `/api/v1/timelines/tag/<tag>` | No | Free |
 | Reddit | OAuth client-credentials, read-only | Yes, free | Free |
+| X (optional) | Xpoz API via SDK | Yes, paid credits | Metered |
 | Google News | Public RSS search feed | No | Free |
 | GDELT (optional, off) | DOC 2.0 API | No | Free, IP-rate-limited |
 | Discovery | `ddgs` metasearch library | No | Free |
@@ -79,6 +80,18 @@ and the returned link is a Google redirect rather than the publisher's URL.
 publication time only. It does not fetch article bodies, and it makes no claim
 about the publisher's editorial standards — the index includes user-generated
 sources alongside established outlets.
+
+### X via Xpoz
+
+Xpoz is a third-party reseller of public X data. It is **metered**: the
+free tier is a one-time 500 credits at 2 per Twitter query, and there is
+no monthly reset. Access is therefore gated in code by a persistent
+credit ledger with a demo reserve (see `docs/decisions.md` §17).
+
+**What this means:** this is the one path in the module that costs money
+and depends on a vendor's continued operation and terms. Collecting X
+through a reseller is also a different terms question from using X's own
+API — confirm with your organisation before operational use.
 
 ### Reddit
 

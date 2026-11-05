@@ -19,7 +19,16 @@ from .analysis import indicators as indicator_mod
 from .analysis import narratives as narr_mod
 from .analysis import propagation as prop_mod
 from .analysis import threat as threat_mod
-from .collection import discovery, gdelt, mastodon, news_rss, reddit, telegram, youtube
+from .collection import (
+    discovery,
+    gdelt,
+    mastodon,
+    news_rss,
+    reddit,
+    telegram,
+    xpoz,
+    youtube,
+)
 from .models import (
     TLP,
     AnalysisBundle,
@@ -34,6 +43,7 @@ from .models import (
 )
 from .presets import resolve as resolve_preset
 from .settings import AppConfig
+from .spend import CreditLedger
 from .store import Store
 from .text import detect_language
 
@@ -85,6 +95,8 @@ def collect(
         platforms.append(Platform.GOOGLE_NEWS)
     if config.budgets.enable_gdelt:
         platforms.append(Platform.GDELT)
+    if config.budgets.enable_x:
+        platforms.append(Platform.X)
 
     for platform in platforms:
         report = PlatformReport(platform=platform)
@@ -207,6 +219,36 @@ def collect(
             report.discovery = fetch.status
             report.retrieval = fetch.status
             report.truncated = fetch.truncated
+
+        elif platform is Platform.X:
+            if store is None:
+                report.retrieval = StageStatus.UNSUPPORTED
+                report.notes.append(
+                    "X skipped: the credit ledger needs persistent storage "
+                    "(run without a store cannot enforce the spend cap)"
+                )
+            else:
+                fetch = xpoz.collect(
+                    run.topic,
+                    aliases=run.aliases,
+                    window_start=run.window.start,
+                    window_end=run.window.end,
+                    budgets=config.budgets,
+                    credentials=config.xpoz,
+                    ledger=CreditLedger(store, config.credits),
+                    run_id=run.run_id,
+                )
+                run.queries.extend(fetch.queries)
+                report.notes.extend(fetch.notes)
+                platform_posts.extend(fetch.posts)
+                report.sources_found = len(
+                    {p.author_id for p in fetch.posts if p.author_id}
+                )
+                report.discovery = fetch.status
+                report.retrieval = fetch.status
+                report.truncated = fetch.truncated
+                if fetch.credits_spent:
+                    report.notes.append(f"credits spent: {fetch.credits_spent}")
 
         elif platform is Platform.GOOGLE_NEWS:
             fetch = news_rss.collect(

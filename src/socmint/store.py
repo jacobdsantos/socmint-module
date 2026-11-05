@@ -54,8 +54,17 @@ CREATE TABLE IF NOT EXISTS reviews (
     created_at TEXT NOT NULL,
     PRIMARY KEY (run_id, kind, target_id)
 );
+CREATE TABLE IF NOT EXISTS credit_spend (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    run_id TEXT,
+    units INTEGER NOT NULL,
+    note TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_posts_run_platform ON posts(run_id, platform);
 CREATE INDEX IF NOT EXISTS idx_posts_run_published ON posts(run_id, published_at);
+CREATE INDEX IF NOT EXISTS idx_credit_provider ON credit_spend(provider, ts);
 """
 
 
@@ -206,6 +215,42 @@ class Store:
                 claim.reviewer = r["reviewer"]
                 claim.reviewed_at = datetime.fromisoformat(r["created_at"])
         return bundle
+
+    # -- metered spend ----------------------------------------------------
+    def record_spend(
+        self,
+        provider: str,
+        units: int,
+        *,
+        run_id: str | None = None,
+        note: str | None = None,
+    ) -> None:
+        """Append one spend entry. Negative units are refunds, not corrections.
+
+        Append-only on purpose: a ledger you can edit in place is not a ledger,
+        and the whole point of this table is that a test run cannot quietly
+        forget it spent the demo budget.
+        """
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO credit_spend(provider, ts, run_id, units, note) VALUES (?,?,?,?,?)",
+                (provider, utcnow().isoformat(), run_id, units, note),
+            )
+
+    def spend_total(self, provider: str) -> int:
+        rows = self._read(
+            "SELECT COALESCE(SUM(units), 0) AS total FROM credit_spend WHERE provider=?",
+            (provider,),
+        )
+        return int(rows[0]["total"]) if rows else 0
+
+    def spend_history(self, provider: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._read(
+            "SELECT ts, run_id, units, note FROM credit_spend "
+            "WHERE provider=? ORDER BY id DESC LIMIT ?",
+            (provider, limit),
+        )
+        return [dict(r) for r in rows]
 
     # -- convenience ------------------------------------------------------
     def export_rows(self, run_id: str) -> list[dict[str, Any]]:

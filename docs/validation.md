@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**171 tests, all passing, 86% statement coverage** across `src/socmint`
+**192 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -311,6 +311,32 @@ by looking at output that was wrong in a way the tests did not catch.
     `.env.example` is not, which was verified with `git check-ignore` rather
     than assumed.
 
+
+### Metered spend
+
+28. **The ledger and the collector could disagree about the policy.** The first
+    version passed a `CreditPolicy` into the collector while the ledger held its
+    own copy. The test for "spending is disabled" failed because the ledger had
+    been built with `allow_spend=True` and its copy was the one that decided. Two
+    copies of a spend policy is a bug waiting to be a surprise, so the parameter
+    was removed: the ledger owns the policy and is the only thing consulted.
+
+29. **Charging after a successful call under-counts.** If the process dies
+    between the request and the ledger write, the credits are gone from the
+    account but absent from the ledger — the one direction that overspends. The
+    collector now charges *before* the call and appends a refund if the call
+    fails. The refund is a negative entry, not a deletion, so the history still
+    shows what was attempted.
+
+30. **X cannot be exercised end to end without a key.** Everything up to the
+    network call is tested against a fake SDK: missing key, missing package,
+    disabled spend, exhausted reserve, window filtering, and refund-on-failure.
+    The SDK surface itself was inspected from the installed package
+    (`xpoz==0.10.1`) rather than taken from its README, so the field names in
+    `to_post` are the real ones. What remains unverified until a key exists is
+    whether the endpoint is reachable from this network — the same check that
+    disqualified `public.api.bsky.app`.
+
 ---
 
 ## 6. False positives and false negatives observed
@@ -347,7 +373,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 171 tests
+.venv/bin/pytest -q                                   # 192 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports
