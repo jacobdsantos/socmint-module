@@ -35,7 +35,9 @@ st.set_page_config(
     page_title="SOCMINT · Case Workbench",
     page_icon="◆",
     layout="wide",
-    initial_sidebar_state="expanded",
+    # "auto" keeps the sidebar open on a laptop but collapses it on a narrow
+    # screen, where an expanded sidebar would take half the viewport.
+    initial_sidebar_state="auto",
 )
 
 CSS = """
@@ -195,19 +197,26 @@ CSS = """
     font-family: var(--mono) !important; font-size: 13px !important;
     letter-spacing: .06em; color: var(--ink) !important;
   }
-  .stTabs [data-baseweb="tab-list"] {
+  /* Streamlit 1.66 renders tabs and chips with react-aria, not BaseWeb: the
+     hooks are [role="tablist"] / [data-testid="stTab"] and
+     [data-testid="stMultiSelectTagsContainer"]. BaseWeb selectors match nothing. */
+  .stTabs [role="tablist"] {
     gap: 2px; border-bottom: 1px solid var(--line); background: transparent;
   }
-  .stTabs [data-baseweb="tab"] {
+  .stTabs [data-testid="stTab"] {
     font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
     text-transform: uppercase; color: var(--dim);
     background: transparent; border-radius: 0; padding: 10px 14px;
+  }
+  .stTabs [data-testid="stTab"] p {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase;
   }
   .stTabs [aria-selected="true"] {
     color: var(--ink) !important; background: rgba(232,35,74,.08) !important;
     box-shadow: inset 0 -2px 0 var(--crimson);
   }
-  .stTabs [data-baseweb="tab-highlight"] { background: transparent; }
+  .stTabs [aria-selected="true"] p { color: var(--ink) !important; }
   div[data-testid="stExpander"] details {
     border: 1px solid var(--line) !important; border-radius: 4px !important;
     background: rgba(12,17,50,.55) !important;
@@ -233,25 +242,26 @@ CSS = """
   [data-testid="stAlert"] p { color: var(--ink) !important; font-size: 13px; line-height: 1.6; }
   [data-testid="stAlert"] svg { display: none; }
   [data-testid="stAlertContainer"] { background: transparent !important; }
-  div[data-baseweb="notification"] {
-    background: var(--navy2) !important; border-left: 3px solid var(--amber) !important;
-  }
   [data-testid="stSidebar"] [data-testid="stAlert"] { border-left-color: var(--crimson) !important; }
   [data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
     font-family: var(--mono) !important; font-size: 12px !important;
   }
-  [data-testid="stSidebar"] [data-baseweb="select"] { font-size: 12px; }
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] { font-size: 12px; }
   [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] small { color: var(--dim) !important; }
 
   /* Multiselect tokens default to a solid primary fill, which reads as an alert.
      Make them quiet chips: navy fill, crimson rule. */
-  [data-baseweb="tag"] {
+  [data-testid="stMultiSelectTagsContainer"] > span[role="group"] > span {
     background: var(--navy3) !important; border: 1px solid var(--crimson) !important;
     color: var(--ink) !important; border-radius: 3px !important;
   }
-  [data-baseweb="tag"] span { color: var(--ink) !important; font-family: var(--mono);
-    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
-  [data-baseweb="tag"] svg { fill: var(--crimson) !important; }
+  [data-testid="stMultiSelectTagsContainer"] > span[role="group"] > span span {
+    color: var(--ink) !important; font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+  }
+  [data-testid="stMultiSelectTagsContainer"] > span[role="group"] > span svg {
+    fill: var(--crimson) !important; color: var(--crimson) !important;
+  }
 
   .stDownloadButton > button {
     font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
@@ -374,26 +384,34 @@ st.sidebar.markdown("### <span style='color:#E8234A'>&gt;</span> new case", unsa
 st.sidebar.caption("Topic-driven collection. Anonymous, budgeted, evidence-first.")
 
 with st.sidebar.form("run_form"):
+    # Three inputs are all a demo needs. Everything else has a defensible
+    # default, so it lives behind one expander rather than competing for
+    # attention with the two fields that actually decide the case.
     topic = st.text_input("Topic", placeholder="Acme Bank collapse")
-    alias_text = st.text_input("Aliases (comma separated)", placeholder="lindol, PH quake")
-    case_label = st.selectbox(
-        "Case template",
-        [entry["label"] for entry in catalogue()],
-        index=0,
-        help="Frames the assessment and which threat patterns are in focus. "
-             "It does not change what is collected.",
-    )
-    tlp_label = st.selectbox(
-        "TLP marking",
-        ["auto (from template)"] + [marking.value for marking in TLP],
-        index=0,
-    )
     start = st.date_input("Start (inclusive)", value=date.today() - timedelta(days=14))
     end = st.date_input("End (inclusive)", value=date.today() - timedelta(days=1))
-    tz_name = st.selectbox("Timezone", ["UTC", "Asia/Manila", "Asia/Singapore", "America/New_York"])
-    max_posts = st.slider("Post cap per run", 50, 800, 250, step=50)
-    offline = st.checkbox("Lexical only (skip embedding model)", value=False)
-    retrieve_evidence = st.checkbox("Retrieve candidate evidence for claims", value=False)
+
+    with st.expander("Advanced"):
+        alias_text = st.text_input("Aliases (comma separated)", placeholder="lindol, PH quake")
+        case_label = st.selectbox(
+            "Case template",
+            [entry["label"] for entry in catalogue()],
+            index=0,
+            help="Frames the assessment and which threat patterns are in focus. "
+                 "It does not change what is collected.",
+        )
+        tlp_label = st.selectbox(
+            "TLP marking",
+            ["auto (from template)"] + [marking.value for marking in TLP],
+            index=0,
+        )
+        tz_name = st.selectbox(
+            "Timezone", ["UTC", "Asia/Manila", "Asia/Singapore", "America/New_York"]
+        )
+        max_posts = st.slider("Post cap per run", 50, 800, 250, step=50)
+        offline = st.checkbox("Lexical only (skip embedding model)", value=False)
+        retrieve_evidence = st.checkbox("Retrieve candidate evidence for claims", value=False)
+
     submitted = st.form_submit_button("Run collection", type="primary")
 
 if submitted:
@@ -436,7 +454,9 @@ selected = st.sidebar.selectbox(
     "Stored run",
     run_ids,
     index=run_ids.index(default_id),
-    format_func=lambda rid: f"{rid} · {next(r.topic for r in runs if r.run_id == rid)}",
+    # Topic first: the run id is a timestamp nobody reads, and the sidebar is
+    # narrow enough that leading with it truncates the only useful part.
+    format_func=lambda rid: f"{next(r.topic for r in runs if r.run_id == rid)} · {rid}",
 )
 
 if st.session_state.get("flash"):
@@ -492,8 +512,20 @@ if bundle.degraded:
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_case, tab_indicators, tab_narr, tab_coord, tab_prop, tab_claims, tab_cover, tab_posts = st.tabs(
-    ["Assessment", "Indicators", "Narratives", "Coordination", "Spread", "Claims", "Coverage", "Evidence"]
+# Ordered by what a reviewer reads first, not by pipeline stage: the assessment
+# and the indicators answer "should I care"; evidence and coverage answer "can I
+# trust it". Spread and claims sit last because they are follow-up work.
+tab_case, tab_indicators, tab_narr, tab_coord, tab_posts, tab_cover, tab_claims, tab_prop = st.tabs(
+    [
+        "Assessment",
+        "Indicators",
+        "Narratives",
+        "Coordination",
+        "Evidence",
+        "Coverage",
+        "Claims",
+        "Spread",
+    ]
 )
 
 # --- Assessment -------------------------------------------------------------
@@ -926,7 +958,9 @@ with tab_cover:
                     "sources": r.sources_found,
                     "posts": r.posts_retrieved,
                     "in window": r.posts_in_range,
-                    "truncated": r.truncated,
+                    # A bool column renders as an empty checkbox, which reads as
+                    # "not yet filled in". Use the same tick/dash as Evidence.
+                    "truncated": "✓" if r.truncated else "—",
                 }
                 for r in run.platforms
             ]

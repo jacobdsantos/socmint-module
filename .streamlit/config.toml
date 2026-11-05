@@ -13,3 +13,8 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+
+# Hide Streamlit's own chrome (Deploy button, overflow menu). It is developer
+# furniture, not part of the case workbench, and it competes with the masthead.
+[client]
+toolbarMode = "minimal"

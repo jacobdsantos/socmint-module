@@ -337,6 +337,17 @@ by looking at output that was wrong in a way the tests did not catch.
     whether the endpoint is reachable from this network — the same check that
     disqualified `public.api.bsky.app`.
 
+31. **The dashboard's tab and chip styling silently stopped applying.** The
+    stylesheet targeted `[data-baseweb="tab"]` and `[data-baseweb="tag"]`, which
+    is the BaseWeb component model. Streamlit 1.66.1 renders both with
+    react-aria instead, so the rules matched nothing: tabs fell back to the
+    default sans-serif mixed-case labels and multiselect tokens to a solid
+    primary fill that reads as an alert. Dead CSS fails silently — the page
+    still renders, just not as designed. Found by querying the live DOM
+    (`document.querySelectorAll('[data-baseweb]')` returned `[]`) rather than
+    by reading the source, and fixed by targeting `[role="tablist"]`,
+    `[data-testid="stTab"]`, and `[data-testid="stMultiSelectTagsContainer"]`.
+
 ---
 
 ## 6. False positives and false negatives observed

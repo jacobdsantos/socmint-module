@@ -163,3 +163,28 @@ and a GDELT adapter left disabled by default.
 - Tests are offline by default via an autouse fixture in `conftest.py` that
   blocks the fetch entry point in every collector. Adding platforms had silently
   turned `pipeline.collect` into a live-network call inside the suite.
+
+## Dashboard pass — demo-first ordering
+
+The dashboard is the artifact an assessor actually looks at, so it was reduced
+to what a reviewer needs rather than what the pipeline happens to produce.
+
+- Tabs run Assessment → Indicators → Narratives → Coordination → Evidence →
+  Coverage → Claims → Spread: the two that answer "should I care" first, the two
+  that answer "can I trust this" before the follow-up work.
+- The sidebar form is Topic + start + end + Run. Aliases, case template, TLP,
+  timezone, post cap, lexical-only, and evidence retrieval moved into one
+  `Advanced` expander; every one of them has a defensible default.
+- Streamlit's own toolbar is hidden (`[client] toolbarMode = "minimal"`) and the
+  sidebar starts `auto`, so it collapses on a narrow screen instead of eating
+  half the viewport.
+- Stored-run labels lead with the topic; the run id is a timestamp nobody reads
+  and truncating it costs nothing.
+- A bool column rendered as empty checkboxes ("truncated"), which reads as
+  unfilled; it is now the same ✓/— as the evidence table.
+- The stylesheet was targeting BaseWeb selectors that Streamlit 1.66 no longer
+  emits, so tab and chip styling had silently stopped applying. See
+  `docs/validation.md` #31.
+
+Verified with Playwright at 1440 and 768 across Assessment, Indicators,
+Coverage, and Evidence. 198 tests pass; ruff clean.
