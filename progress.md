@@ -102,7 +102,7 @@ conflict disinformation, impersonation/deepfake, hacktivist data leak.
 
 ## Day 5 — Verification: COMPLETE
 
-- [x] 192 tests passing, `ruff` clean
+- [x] 198 tests passing, `ruff` clean
 - [x] Statement coverage measured at 86%
 - [x] README, `docs/methodology.md`, `docs/access-and-limitations.md` written
 - [x] `docs/decisions.md`, `docs/validation.md`, `docs/demo-script.md` written

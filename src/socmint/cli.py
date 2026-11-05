@@ -74,8 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="skip the embedding model and use lexical grouping")
     run.add_argument("--no-news", action="store_true",
                      help="skip Google News; collect social sources only")
-    run.add_argument("--no-reddit", action="store_true",
-                     help="skip Reddit (needs REDDIT_CLIENT_ID/SECRET)")
+    run.add_argument("--reddit", action="store_true", dest="enable_reddit",
+                     help="also collect Reddit (off by default; needs a free OAuth app)")
     run.add_argument("--x", action="store_true", dest="enable_x",
                      help="include X via Xpoz (metered; also needs --allow-spend)")
     run.add_argument("--allow-spend", action="store_true",
@@ -100,6 +100,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list", help="list stored runs")
     listing.add_argument("--data-dir", default="data")
+
+    site = sub.add_parser(
+        "export-site",
+        help="write a run as a self-contained static HTML case file",
+    )
+    site.add_argument("--run", required=True, dest="run_id")
+    site.add_argument("--out", required=True, help="output directory")
+    site.add_argument("--data-dir", default="data")
 
     credits = sub.add_parser(
         "credits", help="show metered-API balance and spend history"
@@ -161,6 +169,32 @@ def main(argv: list[str] | None = None) -> int:
         with Store(Path(args.data_dir) / "socmint.db") as store:
             for run in store.list_runs():
                 print(f"{run.run_id}  {run.status:<8} {run.topic}")
+        return 0
+
+    if args.command == "export-site":
+        from .site import export_site
+
+        db = Path(args.data_dir) / "socmint.db"
+        if not db.exists():
+            print(f"no database at {db}", file=sys.stderr)
+            return 2
+        with Store(db) as store:
+            run = store.load_run(args.run_id)
+            if run is None:
+                print(f"unknown run: {args.run_id}", file=sys.stderr)
+                return 2
+            posts = store.load_posts(args.run_id)
+            bundle = store.load_analysis(args.run_id)
+            if bundle is None:
+                print(f"run {args.run_id} has no analysis", file=sys.stderr)
+                return 2
+        try:
+            index = export_site(run, posts, bundle, args.out)
+        except FileExistsError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print(f"wrote {index}")
+        print("deploy: wrangler pages deploy <out>   or   vercel deploy <out> --prod")
         return 0
 
     if args.command == "credits":
@@ -247,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
 
         config = replace(config, budgets=replace(config.budgets, max_posts_per_run=args.max_posts))
-    if args.no_news or args.no_reddit or args.gdelt or args.enable_x:
+    if args.no_news or args.enable_reddit or args.gdelt or args.enable_x:
         from dataclasses import replace
 
         config = replace(
@@ -255,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
             budgets=replace(
                 config.budgets,
                 enable_google_news=not args.no_news,
-                enable_reddit=not args.no_reddit,
+                enable_reddit=args.enable_reddit,
                 enable_x=args.enable_x,
                 enable_gdelt=args.gdelt,
             ),

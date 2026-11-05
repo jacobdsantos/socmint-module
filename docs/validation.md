@@ -16,7 +16,7 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**192 tests, all passing, 86% statement coverage** across `src/socmint`
+**198 tests, all passing, 86% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
@@ -373,7 +373,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 192 tests
+.venv/bin/pytest -q                                   # 198 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports

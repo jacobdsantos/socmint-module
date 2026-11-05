@@ -47,6 +47,25 @@ logger = logging.getLogger(__name__)
 
 _VIDEO_SUFFIXES = (".mp4", ".m3u8", ".mov")
 
+#: Fields requested from the API. Verified against xpoz 0.10.1: omitting this
+#: returns a default set without ``created_at``, so every post lands at day
+#: precision and cannot support minute-level coordination. Requesting an
+#: unsupported name (``impression_count`` did) fails the whole call with HTTP
+#: 500, so this list is the tested intersection, not everything we would like.
+_FIELDS = [
+    "id",
+    "text",
+    "created_at",
+    "author_username",
+    "author_id",
+    "lang",
+    "like_count",
+    "retweet_count",
+    "reply_count",
+    "urls",
+    "is_retweet",
+]
+
 
 @dataclass
 class XpozFetch:
@@ -134,7 +153,9 @@ def to_post(post: Any, *, topic: str | None = None, aliases: list[str] | None = 
         precision=precision,
         published_source="created_at" if published else None,
         engagement=Engagement(
-            views=_count("impression_count"),
+            # impression_count is not a valid field on this endpoint; the API
+            # rejects the whole call if it is requested, so views stay absent.
+            views=None,
             likes=_count("like_count"),
             comments=_count("reply_count"),
             shares=_count("retweet_count"),
@@ -228,6 +249,7 @@ def collect(
             start_date=window_start.date().isoformat(),
             end_date=window_end.date().isoformat(),
             limit=budgets.max_posts_per_run,
+            fields=_FIELDS,
         )
         raw_posts = list(getattr(page, "data", None) or [])
     except Exception as exc:  # noqa: BLE001 - a paid call failing must not abort the run
@@ -250,14 +272,21 @@ def collect(
     log.detail = f"{len(raw_posts)} result(s)"
     result.queries.append(log)
 
+    # The API can return the same post twice in one page; the module's
+    # identity contract assumes one record per post id.
+    seen: set[str] = set()
     for raw in raw_posts:
         mapped = to_post(raw, topic=topic, aliases=aliases)
         if mapped is None or not mapped.topic_match:
             continue
         if mapped.published_at is None:
             continue
-        if window_start <= mapped.published_at < window_end:
-            result.posts.append(mapped)
+        if not (window_start <= mapped.published_at < window_end):
+            continue
+        if mapped.identity in seen:
+            continue
+        seen.add(mapped.identity)
+        result.posts.append(mapped)
 
     result.truncated = len(result.posts) >= budgets.max_posts_per_run
     result.status = StageStatus.OK if result.posts else StageStatus.EMPTY

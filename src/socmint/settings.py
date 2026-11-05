@@ -45,8 +45,10 @@ class Budgets:
     enable_gdelt: bool = False
     # Google News RSS is free, keyless and reliable from the same network.
     enable_google_news: bool = True
-    # Reddit needs a free OAuth app; enabled only when credentials exist.
-    enable_reddit: bool = True
+    # Reddit needs a free OAuth app, which is now gated behind a manual
+    # Responsible Builder Policy review. The adapter works but is off by
+    # default: X via Xpoz covers the same gap and is already working.
+    enable_reddit: bool = False
     # X is metered. Off by default on top of CreditPolicy.allow_spend:
     # two explicit gates, because this is the only source that costs money.
     enable_x: bool = False

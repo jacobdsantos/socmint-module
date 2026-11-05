@@ -217,6 +217,25 @@ so explicitly. It demonstrates the detector firing on repeated, time-aligned,
 near-identical posting, and separating a rumour narrative from a denial
 narrative. **Never mix it into a live evidence set.**
 
+### Publish a case file (Cloudflare Pages / Vercel)
+
+Collection needs a long-lived Python process — `yt-dlp`, PyTorch, SQLite, and
+runs measured in minutes — so it cannot run on Cloudflare or Vercel. The
+**output** can. One command turns a stored run into a single self-contained HTML
+file with no server, no build step, and no network at view time:
+
+```bash
+.venv/bin/socmint export-site --run <run-id> --out dist/case
+wrangler pages deploy dist/case          # Cloudflare Pages
+vercel deploy dist/case --prod           # Vercel
+```
+
+`index.html` is ~80 KB: CSS and JS inlined, data embedded, post text rendered
+with `textContent` so untrusted content can never become markup. It carries the
+assessment, indicators with roles, narratives, coordination, coverage and
+evidence — the same case, minus the controls a static page cannot offer. An
+existing case file is never overwritten.
+
 ### Inspect stored runs
 
 ```bash
@@ -379,7 +398,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 192 offline tests, 86% statement coverage.
+- 198 offline tests, 86% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.
