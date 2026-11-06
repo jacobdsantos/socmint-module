@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from .settings import CreditPolicy
 from .store import Store
@@ -65,6 +66,37 @@ class CreditLedger:
 
     def history(self, limit: int = 50) -> list[dict]:
         return self.store.spend_history(self.provider, limit)
+
+    def last_charge_at(self) -> datetime | None:
+        """When the last billable call was made, or None if there has been one.
+
+        Refunds are skipped: a call that failed upstream still hit the API, so
+        it still starts the cooldown.
+        """
+        for row in self.history(limit=20):
+            if row["units"] <= 0:
+                continue
+            try:
+                ts = datetime.fromisoformat(row["ts"])
+            except (TypeError, ValueError):
+                continue
+            return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+        return None
+
+    def cooldown_remaining(self, now: datetime | None = None) -> float:
+        """Seconds to wait before another billable call is permitted.
+
+        Measured from the ledger, not from process state, so restarting the
+        collector does not reset the gap.
+        """
+        gap = self.policy.min_seconds_between_calls
+        if gap <= 0:
+            return 0.0
+        last = self.last_charge_at()
+        if last is None:
+            return 0.0
+        elapsed = ((now or datetime.now(UTC)) - last).total_seconds()
+        return max(0.0, gap - elapsed)
 
     # -- decisions --------------------------------------------------------
     def check(self, units: int, *, run_spent: int = 0) -> CreditDecision:
@@ -123,6 +155,9 @@ class CreditLedger:
             "available_for_testing": self.available_for_testing,
             "max_per_run": self.policy.max_per_run,
             "allow_spend": self.policy.allow_spend,
+            "max_results_per_query": self.policy.max_results_per_query,
+            "min_seconds_between_calls": self.policy.min_seconds_between_calls,
+            "cooldown_remaining": round(self.cooldown_remaining(), 1),
         }
 
 

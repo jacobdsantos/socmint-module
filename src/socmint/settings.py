@@ -99,6 +99,14 @@ class CreditPolicy:
     cost_per_call: int = 2
     #: Off by default. Nothing spends until this is explicitly set.
     allow_spend: bool = False
+    #: Results requested per query. The SDK will happily return hundreds; on a
+    #: metered source the point is a sample that answers "is this being talked
+    #: about", not a corpus. Ten is enough for that and keeps the run readable.
+    max_results_per_query: int = 10
+    #: Minimum gap between billable calls, measured from the last charge in the
+    #: ledger so it holds across runs and restarts, not just within one process.
+    #: Set to 0 to disable.
+    min_seconds_between_calls: float = 30.0
 
     @property
     def testable(self) -> int:

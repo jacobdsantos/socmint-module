@@ -262,3 +262,83 @@ def test_empty_result_is_empty_not_failed(ledger) -> None:
     assert result.status == "empty"
     # The call succeeded, so the credit was spent even though nothing came back.
     assert ledger.spent == 2
+
+
+# ---------------------------------------------------------------------------
+# Per-query cap and call cooldown
+# ---------------------------------------------------------------------------
+
+
+def _many_tweets(n: int) -> list[SimpleNamespace]:
+    return [
+        _tweet(str(i), f"typhoon Philippines bulletin {i}", "2026-10-25T10:00:00Z")
+        for i in range(n)
+    ]
+
+
+def test_results_are_capped_per_query(tmp_path) -> None:
+    with Store(tmp_path / "cap.db") as store:
+        ledger = CreditLedger(
+            store, CreditPolicy(allow_spend=True, max_results_per_query=5)
+        )
+        client = _FakeClient(_many_tweets(25))
+        result = xpoz.collect(
+            "typhoon Philippines",
+            window_start=START,
+            window_end=END,
+            budgets=Budgets(),
+            credentials=KEYED,
+            ledger=ledger,
+            client_factory=lambda: client,
+        )
+    assert len(result.posts) == 5
+    # The cap is also what we ask for, so the API is not asked for a corpus.
+    assert client.twitter.calls[0]["limit"] == 5
+    assert result.truncated is True
+
+
+def test_the_run_budget_still_wins_when_it_is_lower(tmp_path) -> None:
+    with Store(tmp_path / "cap2.db") as store:
+        ledger = CreditLedger(
+            store, CreditPolicy(allow_spend=True, max_results_per_query=50)
+        )
+        client = _FakeClient(_many_tweets(3))
+        xpoz.collect(
+            "typhoon Philippines",
+            window_start=START,
+            window_end=END,
+            budgets=Budgets(max_posts_per_run=2),
+            credentials=KEYED,
+            ledger=ledger,
+            client_factory=lambda: client,
+        )
+    assert client.twitter.calls[0]["limit"] == 2
+
+
+def test_a_second_call_inside_the_cooldown_is_blocked(ledger) -> None:
+    """The gap is read from the ledger, so a restart does not reset it."""
+    first = xpoz.collect(
+        "typhoon Philippines",
+        window_start=START,
+        window_end=END,
+        budgets=Budgets(),
+        credentials=KEYED,
+        ledger=ledger,
+        client_factory=lambda: _FakeClient(_many_tweets(1)),
+    )
+    assert first.status == "ok"
+
+    second = xpoz.collect(
+        "typhoon Philippines",
+        window_start=START,
+        window_end=END,
+        budgets=Budgets(),
+        credentials=KEYED,
+        ledger=ledger,
+        client_factory=lambda: _FakeClient(_many_tweets(1)),
+    )
+    assert second.status == "blocked_policy"
+    assert any("cooldown" in note for note in second.notes)
+    assert second.credits_spent == 0
+    # The refused call must not have spent anything.
+    assert ledger.spent == 2

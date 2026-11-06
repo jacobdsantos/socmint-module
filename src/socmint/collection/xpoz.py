@@ -14,6 +14,11 @@ Design consequences:
   ``unsupported`` / ``blocked_policy`` with the reason, never an empty result.
 * **One billable call per run.** ``ResponseType.FAST`` returns a single page, so
   the cost of a run is known before it starts rather than discovered afterwards.
+* **Capped per query, and rate-limited.** A query asks for at most
+  ``CreditPolicy.max_results_per_query`` posts — a sample that answers "is this
+  being talked about", not a corpus. A ``min_seconds_between_calls`` cooldown,
+  measured from the ledger's last charge, stops a loop from hammering the API;
+  because it reads the ledger it survives restarts rather than resetting.
 * **No SSRF surface.** The SDK talks to a fixed endpoint; this module never
   hands it a user-supplied URL.
 
@@ -231,6 +236,22 @@ def collect(
         result.notes.append(f"X skipped: {decision.reason}")
         return result
 
+    # Rate limit before the charge, so a refused call costs nothing. The gap is
+    # measured from the ledger's last charge, so it survives restarts and is not
+    # reset by re-running the command.
+    waiting = ledger.cooldown_remaining()
+    if waiting > 0:
+        result.status = StageStatus.BLOCKED_POLICY
+        result.notes.append(
+            f"X skipped: {waiting:.0f}s cooldown remaining "
+            f"(min_seconds_between_calls={ledger.policy.min_seconds_between_calls:g})"
+        )
+        return result
+
+    # A sample, not a corpus: the per-query cap is the smaller of the run's post
+    # budget and the credit policy's own ceiling.
+    limit = max(1, min(budgets.max_posts_per_run, ledger.policy.max_results_per_query))
+
     query = topic.strip()
     log = QueryLog(
         platform=Platform.X,
@@ -248,7 +269,7 @@ def collect(
             query,
             start_date=window_start.date().isoformat(),
             end_date=window_end.date().isoformat(),
-            limit=budgets.max_posts_per_run,
+            limit=limit,
             fields=_FIELDS,
         )
         raw_posts = list(getattr(page, "data", None) or [])
@@ -288,10 +309,18 @@ def collect(
         seen.add(mapped.identity)
         result.posts.append(mapped)
 
-    result.truncated = len(result.posts) >= budgets.max_posts_per_run
+    # ``limit`` is a request, not a guarantee: the API has returned more than
+    # asked before, and an off-topic-heavy page would otherwise let a run exceed
+    # its own stated ceiling.
+    if len(result.posts) > limit:
+        result.posts = result.posts[:limit]
+        result.truncated = True
+    else:
+        result.truncated = len(result.posts) >= limit
     result.status = StageStatus.OK if result.posts else StageStatus.EMPTY
     if not result.posts:
         result.notes.append("X returned no in-window post for this query")
+    result.notes.append(f"capped at {limit} result(s) per query")
     return result
 
 

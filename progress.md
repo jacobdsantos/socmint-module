@@ -102,7 +102,7 @@ conflict disinformation, impersonation/deepfake, hacktivist data leak.
 
 ## Day 5 — Verification: COMPLETE
 
-- [x] 205 tests passing, `ruff` clean
+- [x] 213 tests passing, `ruff` clean
 - [x] Statement coverage measured at 86%
 - [x] README, `docs/methodology.md`, `docs/access-and-limitations.md` written
 - [x] `docs/decisions.md`, `docs/validation.md`, `docs/demo-script.md` written
@@ -187,7 +187,7 @@ to what a reviewer needs rather than what the pipeline happens to produce.
   `docs/validation.md` #31.
 
 Verified with Playwright at 1440 and 768 across Assessment, Indicators,
-Coverage, and Evidence. 205 tests pass; ruff clean.
+Coverage, and Evidence. 213 tests pass; ruff clean.
 
 ## Published case file — same design, whole case
 
@@ -216,5 +216,27 @@ Cloudflare Pages or Vercel with no build step. It had drifted from the dashboard
 
 Verified by exporting a live run and reading it in a browser at 1440: all ten
 sections render, the filter takes 43 rows to 3 on "gmanews", no external
-resource requests (the only console error is a missing favicon). 205 tests pass;
+resource requests (the only console error is a missing favicon). 213 tests pass;
 ruff clean.
+
+## X is capped per query and rate-limited
+
+The credit ledger bounded what a *run* could spend, but not what a single query
+could return: `limit` was the run's post budget (500 by default), so one call
+could pull hundreds of tweets. On a source where the free tier is a one-time
+grant, that is the wrong shape — the question a query answers is "is this being
+talked about", not "give me everything".
+
+- `CreditPolicy.max_results_per_query` (default 10) caps both what is asked for
+  and what is kept. The request is also clamped by the run's post budget, so the
+  lower of the two wins.
+- `CreditPolicy.min_seconds_between_calls` (default 30s) gates billable calls.
+  It is measured from the **last charge in the ledger**, not from process state,
+  so restarting the collector does not reset it. A refused call costs nothing —
+  the gate runs before the charge.
+- Both are exposed as `--x-max-results` and `--x-cooldown`, and `socmint credits`
+  prints them along with the seconds left on the current cooldown.
+
+The result cap is enforced twice: once in the request, and again on the parsed
+posts, because the API has returned more than asked before and an
+off-topic-heavy page would otherwise exceed the run's own stated ceiling.

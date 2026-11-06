@@ -99,6 +99,19 @@ credits. Check the balance any time:
 socmint credits
 ```
 
+Two further limits apply to every call, because a metered source should return a
+sample rather than a corpus:
+
+| Limit | Default | Override |
+|---|---|---|
+| Posts kept per query | 10 | `--x-max-results N` |
+| Seconds between billable calls | 30 | `--x-cooldown S` (0 disables) |
+
+The cooldown is measured from the **last charge in the ledger**, not from process
+state, so restarting the collector or re-running the command does not reset it.
+A call refused by the cooldown costs nothing. `socmint credits` shows both
+settings and how long the cooldown still has to run.
+
 That reserve exists because Xpoz's free tier is a one-time grant of 500 credits
 at 2 per query — there is no monthly reset. A prototype that spends freely while
 being tested has no credits left on demo day.
@@ -403,7 +416,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 205 offline tests, 84% statement coverage.
+- 213 offline tests, 84% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

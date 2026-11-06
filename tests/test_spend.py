@@ -90,3 +90,41 @@ def test_summary_reports_the_reserve(store) -> None:
 
 def test_zero_units_is_not_a_spend(store) -> None:
     assert CreditLedger(store, CreditPolicy(allow_spend=True)).check(0).allowed is False
+
+
+# ---------------------------------------------------------------------------
+# Cooldown
+# ---------------------------------------------------------------------------
+
+
+def test_a_fresh_ledger_has_no_cooldown(store) -> None:
+    assert CreditLedger(store, CreditPolicy()).cooldown_remaining() == 0.0
+
+
+def test_a_charge_starts_the_cooldown(store) -> None:
+    ledger = CreditLedger(store, CreditPolicy(allow_spend=True, min_seconds_between_calls=30))
+    ledger.charge(2, note="x search")
+    assert ledger.cooldown_remaining() > 25
+
+
+def test_the_cooldown_expires(store) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    ledger = CreditLedger(store, CreditPolicy(allow_spend=True, min_seconds_between_calls=30))
+    ledger.charge(2, note="x search")
+    later = datetime.now(UTC) + timedelta(seconds=31)
+    assert ledger.cooldown_remaining(now=later) == 0.0
+
+
+def test_a_refund_does_not_restart_the_cooldown(store) -> None:
+    """The call still hit the API, so the gap is measured from the charge."""
+    ledger = CreditLedger(store, CreditPolicy(allow_spend=True, min_seconds_between_calls=30))
+    ledger.charge(2, note="x search")
+    ledger.refund(2, note="failed")
+    assert ledger.cooldown_remaining() > 25
+
+
+def test_a_zero_cooldown_disables_the_gate(store) -> None:
+    ledger = CreditLedger(store, CreditPolicy(allow_spend=True, min_seconds_between_calls=0))
+    ledger.charge(2, note="x search")
+    assert ledger.cooldown_remaining() == 0.0

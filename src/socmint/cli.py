@@ -82,6 +82,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="permit spending credits; off unless given")
     run.add_argument("--max-credits", type=int, default=None,
                      help="ceiling for this run (default from policy)")
+    run.add_argument("--x-max-results", type=int, default=None,
+                     help="max X posts kept per query (default 10)")
+    run.add_argument("--x-cooldown", type=float, default=None,
+                     help="min seconds between billable X calls (default 30; 0 disables)")
     run.add_argument("--gdelt", action="store_true",
                      help="also query GDELT (IP rate-limited; off by default)")
 
@@ -215,6 +219,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"demo reserve        {summary['demo_reserve']}")
             print(f"available to test   {summary['available_for_testing']}")
             print(f"per-run ceiling     {summary['max_per_run']}")
+            print(f"max results/query   {summary['max_results_per_query']}")
+            print(f"call cooldown       {summary['min_seconds_between_calls']:g}s "
+                  f"(waiting {summary['cooldown_remaining']:g}s)")
             print(f"spending enabled    {summary['allow_spend']}")
             rows = ledger.history(limit=args.limit)
             if rows:
@@ -294,7 +301,12 @@ def main(argv: list[str] | None = None) -> int:
                 enable_gdelt=args.gdelt,
             ),
         )
-    if args.allow_spend or args.max_credits is not None:
+    if (
+        args.allow_spend
+        or args.max_credits is not None
+        or args.x_max_results is not None
+        or args.x_cooldown is not None
+    ):
         from dataclasses import replace
 
         credits = config.credits
@@ -302,6 +314,10 @@ def main(argv: list[str] | None = None) -> int:
             credits = replace(credits, allow_spend=True)
         if args.max_credits is not None:
             credits = replace(credits, max_per_run=max(0, args.max_credits))
+        if args.x_max_results is not None:
+            credits = replace(credits, max_results_per_query=max(1, args.x_max_results))
+        if args.x_cooldown is not None:
+            credits = replace(credits, min_seconds_between_calls=max(0.0, args.x_cooldown))
         config = replace(config, credits=credits)
     if args.offline_analysis:
         from dataclasses import replace
