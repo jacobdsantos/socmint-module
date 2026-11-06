@@ -163,6 +163,11 @@ def _print_summary(run, posts, bundle) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .envfile import load_env_file
+
+    # Before any config is built, so .env and an exported shell variable are
+    # equivalent from the caller's point of view.
+    load_env_file()
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.WARNING,

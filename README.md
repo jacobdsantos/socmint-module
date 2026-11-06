@@ -268,8 +268,18 @@ working link without logging in, and prints a claim URL to keep it.
 ```
 
 Serves at <http://127.0.0.1:8511>, loopback only (set in
-`.streamlit/config.toml`). Eight tabs: Assessment, Indicators, Narratives,
-Coordination, Spread, Claims, Coverage, Evidence.
+`.streamlit/config.toml`).
+
+**Overview** is the default tab and answers the whole case on one screen:
+triage risk and the counts, a stacked daily volume chart by platform, the main
+narratives with volume and first-observed plus a trend sparkline, the account
+groups with the signal behind each, where each narrative was first seen, and how
+it spread. Its last section states what the page cannot show — account creation
+dates, reused profile photos and amplification edges are not available from
+these public surfaces.
+
+The remaining tabs are the detail behind that summary: Assessment, Indicators,
+Narratives, Coordination, Evidence, Coverage, Claims, Spread.
 
 ### Export layout
 
@@ -416,7 +426,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 213 offline tests, 84% statement coverage.
+- 216 offline tests, 84% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

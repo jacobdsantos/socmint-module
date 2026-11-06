@@ -144,6 +144,35 @@ def _cluster(vectors: np.ndarray, similarity: float) -> np.ndarray:
     return model.fit_predict(vectors)
 
 
+def _segment(
+    vectors: np.ndarray, settings: AnalysisSettings
+) -> tuple[np.ndarray, float, bool]:
+    """Cluster, tightening the threshold while one cluster dominates.
+
+    A threshold tuned on a small sample does not hold at ten times the corpus
+    size: at -0.15 centred cosine a 500-post run collapses into a single
+    cluster, which is not a list of narratives. Rather than pick a stricter
+    constant and re-break it on the next corpus, tighten until no cluster holds
+    more than ``narrative_max_cluster_share`` of the posts.
+
+    Returns (labels, threshold_used, was_tightened).
+    """
+    similarity = settings.narrative_similarity
+    labels = _cluster(vectors, similarity)
+    if len(vectors) < 3:
+        return labels, similarity, False
+
+    tightened = False
+    for _ in range(max(0, settings.narrative_threshold_steps)):
+        largest = Counter(labels.tolist()).most_common(1)[0][1]
+        if largest / len(vectors) <= settings.narrative_max_cluster_share:
+            break
+        similarity += settings.narrative_threshold_step
+        labels = _cluster(vectors, similarity)
+        tightened = True
+    return labels, similarity, tightened
+
+
 def _label(member_texts: list[str], corpus_texts: list[str], topic: str) -> str:
     kws = distinctive_keywords(member_texts, corpus_texts, top_n=5)
     if not kws:
@@ -189,7 +218,14 @@ def build_narratives(
     else:
         result.method = "embedding"
 
-    labels = _cluster(vectors, settings.narrative_similarity)
+    labels, used_similarity, tightened = _segment(vectors, settings)
+    if tightened:
+        result.notes.append(
+            f"cluster threshold tightened from {settings.narrative_similarity:+.2f} to "
+            f"{used_similarity:+.2f} centred cosine: at the base threshold one cluster "
+            f"held more than {settings.narrative_max_cluster_share:.0%} of the corpus, "
+            "which is a corpus-wide topic match rather than a set of narratives"
+        )
     result.vectors = vectors
     result.vector_ids = [p.identity for p in eligible]
 

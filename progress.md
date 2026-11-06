@@ -102,7 +102,7 @@ conflict disinformation, impersonation/deepfake, hacktivist data leak.
 
 ## Day 5 — Verification: COMPLETE
 
-- [x] 213 tests passing, `ruff` clean
+- [x] 216 tests passing, `ruff` clean
 - [x] Statement coverage measured at 86%
 - [x] README, `docs/methodology.md`, `docs/access-and-limitations.md` written
 - [x] `docs/decisions.md`, `docs/validation.md`, `docs/demo-script.md` written
@@ -187,7 +187,7 @@ to what a reviewer needs rather than what the pipeline happens to produce.
   `docs/validation.md` #31.
 
 Verified with Playwright at 1440 and 768 across Assessment, Indicators,
-Coverage, and Evidence. 213 tests pass; ruff clean.
+Coverage, and Evidence. 216 tests pass; ruff clean.
 
 ## Published case file — same design, whole case
 
@@ -216,7 +216,7 @@ Cloudflare Pages or Vercel with no build step. It had drifted from the dashboard
 
 Verified by exporting a live run and reading it in a browser at 1440: all ten
 sections render, the filter takes 43 rows to 3 on "gmanews", no external
-resource requests (the only console error is a missing favicon). 213 tests pass;
+resource requests (the only console error is a missing favicon). 216 tests pass;
 ruff clean.
 
 ## X is capped per query and rate-limited
@@ -240,3 +240,33 @@ talked about", not "give me everything".
 The result cap is enforced twice: once in the request, and again on the parsed
 posts, because the API has returned more than asked before and an
 off-topic-heavy page would otherwise exceed the run's own stated ceiling.
+
+## Overview tab, and the narrative bug behind it
+
+The dashboard had eight detail tabs and no answer to "what does this case say".
+Worse, on a real 527-post run the Narratives tab showed a single card: the
+clustering threshold merged all 522 in-scope posts into one cluster.
+
+**Segmentation now adapts.** `_segment` checks the result and, while one cluster
+holds more than 60% of the corpus, tightens the threshold and re-clusters. On
+the same data that moved -0.15 → +0.05 centred cosine and produced 14 clusters,
+the largest holding 18%. A fixed constant cannot survive a change of corpus size
+in either direction; the self-check can.
+
+**Overview is now the first tab and the default read.** Triage risk and counts;
+a stacked daily volume chart by platform; the main narratives with volume,
+first-observed and a trend sparkline; account groups with the signal behind
+each; where each narrative was first seen; how it spread; and a closing section
+naming what the page cannot show.
+
+**Evidence shows media.** 201 of the 527 posts carry a photo or video; the table
+now says which, per row, instead of silently dropping it.
+
+**`.env` is loaded by both entry points.** It never was: the CLI only worked
+because the key happened to be exported in that shell, and the dashboard
+reported X as `unsupported`. Both now read `.env`, an exported variable still
+wins, and the sidebar warns before a run rather than after it.
+
+Verified on the `binance hack` run: 16 narratives, 2 account groups, 16 first
+observations, 25 claims, 222 indicators, chart and sparklines rendering at 1600
+wide. 216 tests pass; ruff clean.

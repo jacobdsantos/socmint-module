@@ -457,3 +457,47 @@ like "nobody posted about this on X".
 **One billable call per run.** `ResponseType.FAST` returns a single page, so the
 cost of a run is known before it starts rather than discovered afterwards.
 
+
+**Per-query cap and cooldown.** A run ceiling bounds what a run spends but not
+what one query returns: with `limit` set to the run's post budget, a single call
+could pull hundreds of tweets. `max_results_per_query` (10) caps both the
+request and the parsed result, because the API has returned more than asked and
+an off-topic-heavy page would otherwise exceed the run's stated ceiling.
+`min_seconds_between_calls` (30s) gates billable calls and is measured from the
+last charge in the ledger rather than from process state — restarting the
+collector must not reset a rate limit.
+
+---
+
+## 18. Narrative segmentation tightens itself, because a constant does not survive a bigger corpus
+
+The clustering threshold (`narrative_similarity`, centred cosine) was tuned on
+small samples. On a 527-post run it merged the entire corpus into one cluster:
+every post scored above the threshold against every other, so "the main
+narratives" was a single item holding 522 posts. That is a corpus-wide topic
+match, not a narrative list, and it made the Narratives tab look broken.
+
+**The fix is not a stricter constant.** Any fixed value is a claim about corpus
+size that the next topic will falsify — tighter splits a small topic into noise,
+looser re-collapses a large one. Instead, `_segment` checks the result: if one
+cluster holds more than `narrative_max_cluster_share` (60%) of the posts, it
+tightens the threshold by `narrative_threshold_step` and re-clusters, up to
+`narrative_threshold_steps` times.
+
+On the same corpus this moved the threshold from -0.15 to +0.05 and produced 14
+clusters, the largest holding 18% of posts. The adjustment is written to the
+method notes, so a reviewer can see that the threshold was not the default and
+why.
+
+**What this does not fix.** The label is still extractive keywords, so a cluster
+can be named `hackerangriff / miliardi / hackeo` — descriptive of vocabulary,
+not of stance. Cluster membership is a semantic grouping; opposing posts share
+vocabulary and cluster together. Confirming, splitting and rejecting remain
+human actions, which is why the review controls exist.
+
+**On signals we do not have.** Account creation dates, reused profile photos and
+who amplified whom are not exposed by the public surfaces used here. The
+coordination section therefore reports what was observed — near-identical text,
+semantic similarity, posting within a window, shared URLs, repeated episodes —
+and the Overview says plainly which of the expected signals are absent rather
+than estimating them.

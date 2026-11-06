@@ -66,6 +66,14 @@ class AnalysisSettings:
     # Threshold on *centred* cosine (see analysis.narratives._center). Raw e5
     # scores overlap between related and unrelated text; centring separates them.
     narrative_similarity: float = -0.15
+    # A fixed threshold does not survive a change of corpus size: on a few dozen
+    # posts -0.15 separates related from unrelated text, but at 500 posts it
+    # merges everything into one cluster, which is not a narrative list. When a
+    # single cluster holds more than this share, the threshold is tightened by
+    # ``narrative_threshold_step`` and clustering is retried.
+    narrative_max_cluster_share: float = 0.6
+    narrative_threshold_step: float = 0.1
+    narrative_threshold_steps: int = 6
     near_duplicate_jaccard: float = 0.82
     min_text_chars: int = 12
     coordination_min_episodes: int = 2

@@ -13,15 +13,19 @@ Binds to loopback only; this is not a hosted service.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from socmint import pipeline
+from socmint.analysis.narratives import volume_series
 from socmint.cli import _parse_bound
+from socmint.envfile import load_env_file
 from socmint.exports import export
 from socmint.models import TLP, CaseTemplate, DateRange
 from socmint.presets import PRESETS, catalogue
@@ -31,6 +35,11 @@ from socmint.store import Store
 
 DATA_DIR = Path("data")
 DB = DATA_DIR / "socmint.db"
+
+# The dashboard is started by a human who expects the .env in the project root
+# to be honoured. Without this, a key exported in another shell makes the CLI
+# work and leaves X reporting "unsupported" here.
+load_env_file(Path(__file__).parent / ".env")
 
 st.set_page_config(
     page_title="SOCMINT · Case Workbench",
@@ -333,6 +342,238 @@ def _evidence_card(post, quote: str | None = None) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Overview — the one page someone reads when they only read one page
+# ---------------------------------------------------------------------------
+
+_PLATFORM_COLOURS = {
+    "mastodon": "#8B7CF6",
+    "telegram": "#35D6A4",
+    "youtube": "#E8234A",
+    "google_news": "#F2A33C",
+    "x": "#7E93FF",
+    "gdelt": "#5A6394",
+}
+
+
+def _platform_colour(name: str) -> str:
+    return _PLATFORM_COLOURS.get(name, "#5A6394")
+
+
+def _blank_figure(height: int) -> go.Figure:
+    fig = go.Figure()
+    fig.update_layout(
+        height=height,
+        margin=dict(l=0, r=0, t=4, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#8A93BF", size=10, family="ui-monospace, Menlo, monospace"),
+        showlegend=False,
+        bargap=0.18,
+    )
+    fig.update_xaxes(showgrid=False, zeroline=False, showline=False, tickfont=dict(size=9))
+    fig.update_yaxes(
+        showgrid=True, gridcolor="#1E2657", zeroline=False, showline=False, tickfont=dict(size=9)
+    )
+    return fig
+
+
+def _volume_chart(posts, *, height: int = 220, legend: bool = False) -> go.Figure | None:
+    """Posts per day, stacked by platform. Undated posts are excluded by design."""
+    series = volume_series(posts)
+    if not series:
+        return None
+    buckets = sorted({row["bucket"] for row in series})
+    platforms = sorted({row["platform"] for row in series})
+    lookup = {(row["bucket"], row["platform"]): row["count"] for row in series}
+
+    fig = _blank_figure(height)
+    for platform in platforms:
+        fig.add_trace(
+            go.Bar(
+                x=buckets,
+                y=[lookup.get((bucket, platform), 0) for bucket in buckets],
+                name=platform.replace("_", " "),
+                marker=dict(color=_platform_colour(platform), line=dict(width=0)),
+                hovertemplate="%{x}<br>%{y} post(s)<extra>" + platform + "</extra>",
+            )
+        )
+    fig.update_layout(
+        barmode="stack",
+        showlegend=legend,
+        legend=dict(orientation="h", y=1.14, x=0, bgcolor="rgba(0,0,0,0)"),
+    )
+    return fig
+
+
+def _sparkline(posts) -> go.Figure | None:
+    """A trend, not a bar chart: at 48px tall, bars read as a barcode."""
+    series = volume_series(posts)
+    if not series:
+        return None
+    buckets = sorted({row["bucket"] for row in series})
+    totals: Counter[str] = Counter()
+    for row in series:
+        totals[row["bucket"]] += row["count"]
+
+    fig = _blank_figure(48)
+    fig.add_trace(
+        go.Scatter(
+            x=buckets,
+            y=[totals[bucket] for bucket in buckets],
+            mode="lines",
+            line=dict(color="#E8234A", width=1.6),
+            fill="tozeroy",
+            fillcolor="rgba(232,35,74,0.16)",
+            hovertemplate="%{x}: %{y} post(s)<extra></extra>",
+        )
+    )
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    return fig
+
+
+def _platform_chips(counts: dict[str, int]) -> str:
+    if not counts:
+        return '<span class="chip">no platform data</span>'
+    return " ".join(
+        f'<span class="chip" style="border-color:{_platform_colour(name)}55">'
+        f"{_esc(name.replace('_', ' '))} {count}</span>"
+        for name, count in sorted(counts.items(), key=lambda kv: -kv[1])
+    )
+
+
+def _members(narrative, posts_by_id: dict) -> list:
+    return [posts_by_id[i] for i in narrative.member_ids if i in posts_by_id]
+
+
+def _render_overview(run, in_scope, bundle, posts_by_id: dict) -> None:
+    assessment = bundle.assessment
+    dated = sum(1 for p in in_scope if p.published_at)
+    actionable = sum(1 for i in bundle.indicators if i.role.value == "indicator")
+
+    tiles = st.columns(5)
+    tiles[0].markdown(
+        _stat("Triage risk", f"{assessment.risk_score}" if assessment else "—",
+              "/ 100 · additive heuristic"),
+        unsafe_allow_html=True,
+    )
+    tiles[1].markdown(
+        _stat("Narratives", len(bundle.narratives), "candidates · review required"),
+        unsafe_allow_html=True,
+    )
+    tiles[2].markdown(
+        _stat("Account groups", len(bundle.coordination), "candidates · not verdicts"),
+        unsafe_allow_html=True,
+    )
+    tiles[3].markdown(
+        _stat("Indicators", actionable, "actionable values"),
+        unsafe_allow_html=True,
+    )
+    tiles[4].markdown(
+        _stat("Claims", len(bundle.claims),
+              f"{sum(1 for c in bundle.claims if c.verdict == 'unreviewed')} unreviewed"),
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="sec">Volume over time</div>', unsafe_allow_html=True)
+    chart = _volume_chart(in_scope, legend=True)
+    if chart is None:
+        st.info("No post carried a verified publication date, so no trend can be drawn.")
+    else:
+        st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            f'<div class="note">{len(in_scope)} in-scope post(s), {dated} dated. '
+            "Undated posts are excluded from the trend rather than guessed.</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="sec">Main narratives</div>', unsafe_allow_html=True)
+    if not bundle.narratives:
+        st.info("No narrative candidates. The corpus may be too small or too homogeneous.")
+    for narrative in bundle.narratives[:6]:
+        members = _members(narrative, posts_by_id)
+        first = narrative.first_seen.strftime("%Y-%m-%d %H:%M") if narrative.first_seen else "—"
+        quote = ""
+        for pid in narrative.representative_ids[:1]:
+            post = posts_by_id.get(pid)
+            if post:
+                quote = (post.title or post.text or "")[:240]
+        st.markdown(
+            f'<div class="kj"><div class="head">'
+            f'<span class="kid">{_esc(narrative.narrative_id)}</span>'
+            f'<span class="chip">{len(members)} posts</span>'
+            f'<span class="chip">first {first} UTC</span>'
+            f'{_platform_chips(narrative.platform_counts)}</div>'
+            f'<div class="body"><strong>{_esc(narrative.label)}</strong></div>'
+            f'<div class="cav">“{_esc(quote)}”</div></div>',
+            unsafe_allow_html=True,
+        )
+        spark = _sparkline(members)
+        if spark is not None:
+            st.plotly_chart(spark, use_container_width=True, config={"displayModeBar": False})
+
+    st.markdown('<div class="sec">Accounts that appear to act together</div>', unsafe_allow_html=True)
+    if not bundle.coordination:
+        st.markdown(
+            '<div class="note">No account group met the repeated-evidence threshold in this '
+            "sample. That is a negative result for this sample, not proof of absence.</div>",
+            unsafe_allow_html=True,
+        )
+    for group in bundle.coordination[:4]:
+        reasons = "".join(
+            f'<div class="cav">· {_esc(s.kind.replace("_", " "))} — {_esc(s.detail)}</div>'
+            for s in group.signals[:4]
+        )
+        st.markdown(
+            f'<div class="kj"><div class="head">'
+            f'<span class="kid">{_esc(group.group_id)}</span>'
+            f'<span class="chip">{len(group.account_ids)} accounts</span>'
+            f'<span class="chip">{len(group.episodes)} episodes</span>'
+            f'<span class="chip">{_esc(str(group.confidence).replace("_", " "))}</span></div>'
+            f'<div class="body mono">{_esc(", ".join(group.account_ids))}</div>'
+            f"{reasons}</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="sec">Where it started</div>', unsafe_allow_html=True)
+    if not bundle.earliest:
+        st.markdown('<div class="note">No dated narrative to anchor a first observation.</div>',
+                    unsafe_allow_html=True)
+    for entry in bundle.earliest[:6]:
+        when = entry.observed_at.strftime("%Y-%m-%d %H:%M") if entry.observed_at else "—"
+        st.markdown(
+            f'<div class="note"><strong>{_esc(entry.narrative_id)}</strong> · first observed '
+            f"{when} UTC · {_esc(', '.join(entry.accounts) or 'unknown account')} · "
+            f"{_esc(', '.join(entry.platforms))}</div>",
+            unsafe_allow_html=True,
+        )
+    if bundle.earliest:
+        st.markdown(f'<div class="caveat">↳ {_esc(bundle.earliest[0].caveat)}</div>',
+                    unsafe_allow_html=True)
+
+    st.markdown('<div class="sec">How it spread</div>', unsafe_allow_html=True)
+    explicit = sum(1 for e in bundle.propagation if e.kind == "explicit")
+    inferred = sum(1 for e in bundle.propagation if e.kind == "inferred")
+    per_platform = Counter(str(p.platform) for p in in_scope)
+    st.markdown(
+        f'<div class="note">{len(per_platform)} platform(s) carried this topic · '
+        f"{explicit} explicit link(s) · {inferred} inferred link(s). "
+        "An inferred link is a content-and-chronology association, not transmission.</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="sec">What this page does not show</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="note">Account creation dates, reused profile photos and who amplified '
+        "whom are not available from these public surfaces, so they are absent rather than "
+        "estimated. Coordination is not intent. Extraction is not validation. Coverage is a "
+        "sample bounded by the run's caps.</div>",
+        unsafe_allow_html=True,
+    )
+
+
 @st.cache_resource
 def get_store() -> Store:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -445,8 +686,12 @@ with st.sidebar.expander("X / Twitter (metered)"):
         help="X is the only metered source. One query costs 2 credits.",
     )
     if include_x:
-        _ledger = CreditLedger(get_store(), AppConfig(data_dir=DATA_DIR).credits)
+        _config = AppConfig(data_dir=DATA_DIR)
+        _ledger = CreditLedger(get_store(), _config.credits)
         _summary = _ledger.summary()
+        if not _config.xpoz.configured:
+            # Better here than discovered in Coverage after a nine-minute run.
+            st.warning("XPOZ_API_KEY is not set — X will report unsupported.")
         st.caption(
             f"{_summary['available_for_testing']} credits available for testing · "
             f"{_summary['demo_reserve']} held for the demo"
@@ -568,11 +813,15 @@ if bundle.degraded:
 # Tabs
 # ---------------------------------------------------------------------------
 
-# Ordered by what a reviewer reads first, not by pipeline stage: the assessment
-# and the indicators answer "should I care"; evidence and coverage answer "can I
-# trust it". Spread and claims sit last because they are follow-up work.
-tab_case, tab_indicators, tab_narr, tab_coord, tab_posts, tab_cover, tab_claims, tab_prop = st.tabs(
+# Overview first: someone who reads one screen should get the whole case. The
+# tabs behind it are the detail a reviewer opens when a line on the overview
+# raises a question, so they follow the overview's own order.
+(
+    tab_over, tab_case, tab_indicators, tab_narr, tab_coord,
+    tab_posts, tab_cover, tab_claims, tab_prop,
+) = st.tabs(
     [
+        "Overview",
         "Assessment",
         "Indicators",
         "Narratives",
@@ -583,6 +832,11 @@ tab_case, tab_indicators, tab_narr, tab_coord, tab_posts, tab_cover, tab_claims,
         "Spread",
     ]
 )
+
+# --- Overview ---------------------------------------------------------------
+
+with tab_over:
+    _render_overview(run, in_scope, bundle, posts_by_id)
 
 # --- Assessment -------------------------------------------------------------
 
@@ -1066,6 +1320,16 @@ with tab_posts:
                     "topic": "✓" if p.topic_match else "—",
                     "admiralty": p.admiralty.code if p.admiralty else "—",
                     "text": (p.title or p.text or "")[:140],
+                    # Media is collected as references, not downloaded: the cell
+                    # says what the post carries, the source link renders it.
+                    "media": (
+                        " · ".join(
+                            f"{count} {kind}"
+                            for kind, count in Counter(str(m.kind) for m in p.media).most_common()
+                        )
+                        if p.media
+                        else "—"
+                    ),
                     "views": p.engagement.views if p.engagement else None,
                     "url": p.url,
                 }

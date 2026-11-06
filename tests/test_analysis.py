@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from socmint.analysis import narratives, propagation
 from socmint.models import NarrativeCandidate
 from socmint.settings import AnalysisSettings
@@ -97,3 +99,65 @@ def test_volume_series_uses_only_dated_posts():
     undated.published_at = None
     rows = narratives.volume_series([dated, undated])
     assert sum(r["count"] for r in rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Adaptive segmentation
+# ---------------------------------------------------------------------------
+
+
+def _blob(direction: np.ndarray, n: int, seed: int) -> np.ndarray:
+    """``n`` near-identical unit vectors around ``direction``."""
+    rng = np.random.default_rng(seed)
+    vectors = direction + rng.normal(scale=0.02, size=(n, direction.shape[0]))
+    return vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+
+
+def test_a_threshold_that_swallows_the_corpus_is_tightened():
+    """A fixed threshold tuned on a small sample collapses a larger one.
+
+    Two blobs 0.3 apart merge at the base threshold; the segmenter must notice
+    that one cluster holds the whole corpus and tighten until it does not.
+    """
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([0.3, np.sqrt(1 - 0.09), 0.0])
+    vectors = np.vstack([_blob(a, 10, 1), _blob(b, 10, 2)])
+
+    settings = AnalysisSettings()
+    base = narratives._cluster(vectors, settings.narrative_similarity)
+    assert len(set(base.tolist())) == 1  # the bug being fixed
+
+    labels, used, tightened = narratives._segment(vectors, settings)
+    assert tightened is True
+    assert used > settings.narrative_similarity
+    assert len(set(labels.tolist())) == 2
+
+
+def test_a_corpus_that_already_separates_is_left_alone():
+    """Two blobs far enough apart survive the base threshold untouched."""
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([-0.95, np.sqrt(1 - 0.9025), 0.0])  # cosine -0.95: distance 1.95
+    vectors = np.vstack([_blob(a, 10, 3), _blob(b, 10, 4)])
+
+    settings = AnalysisSettings()
+    labels, used, tightened = narratives._segment(vectors, settings)
+    assert tightened is False
+    assert used == settings.narrative_similarity
+    assert len(set(labels.tolist())) == 2
+
+
+def test_build_narratives_records_why_it_tightened(monkeypatch):
+    """The adjustment is visible in the method notes, not silent."""
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([0.3, np.sqrt(1 - 0.09), 0.0])
+    vectors = np.vstack([_blob(a, 6, 5), _blob(b, 6, 6)])
+    posts = [
+        make_post(post_id=str(i), author_id=f"a{i}", text=f"post {i} about the flood control audit")
+        for i in range(12)
+    ]
+
+    monkeypatch.setattr(narratives, "_embed", lambda texts, settings: vectors)
+    result = narratives.build_narratives(posts, topic="flood", settings=AnalysisSettings())
+
+    assert any("tightened" in note for note in result.notes)
+    assert len(result.narratives) == 2
