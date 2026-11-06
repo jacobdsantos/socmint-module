@@ -26,6 +26,7 @@ from socmint.exports import export
 from socmint.models import TLP, CaseTemplate, DateRange
 from socmint.presets import PRESETS, catalogue
 from socmint.settings import AppConfig
+from socmint.spend import CreditLedger
 from socmint.store import Store
 
 DATA_DIR = Path("data")
@@ -349,6 +350,10 @@ def _run_collection(
     retrieve_evidence: bool,
     case_template: CaseTemplate,
     tlp: TLP | None,
+    include_x: bool = False,
+    allow_spend: bool = False,
+    x_max_results: int = 10,
+    x_cooldown: float = 30.0,
 ):
     tz = ZoneInfo(tz_name)
     window = DateRange(
@@ -358,7 +363,23 @@ def _run_collection(
     from dataclasses import replace
 
     config = AppConfig(data_dir=DATA_DIR)
-    config = replace(config, budgets=replace(config.budgets, max_posts_per_run=max_posts))
+    config = replace(
+        config,
+        budgets=replace(config.budgets, max_posts_per_run=max_posts, enable_x=include_x),
+    )
+    if include_x:
+        # Spending stays off unless the operator ticked it. X without permission
+        # is not an error: the collector reports blocked_policy and the coverage
+        # table shows why, which is the behaviour worth demonstrating.
+        config = replace(
+            config,
+            credits=replace(
+                config.credits,
+                allow_spend=allow_spend,
+                max_results_per_query=max(1, int(x_max_results)),
+                min_seconds_between_calls=max(0.0, float(x_cooldown)),
+            ),
+        )
     if offline:
         config = replace(config, analysis=replace(config.analysis, force_lexical=True))
 
@@ -414,6 +435,39 @@ with st.sidebar.form("run_form"):
 
     submitted = st.form_submit_button("Run collection", type="primary")
 
+# Outside the form on purpose: a form batches its inputs, so a checkbox that
+# reveals more fields would only update on submit. Out here it reruns and the
+# controls appear immediately.
+with st.sidebar.expander("X / Twitter (metered)"):
+    include_x = st.checkbox(
+        "Include X in this run",
+        value=False,
+        help="X is the only metered source. One query costs 2 credits.",
+    )
+    if include_x:
+        _ledger = CreditLedger(get_store(), AppConfig(data_dir=DATA_DIR).credits)
+        _summary = _ledger.summary()
+        st.caption(
+            f"{_summary['available_for_testing']} credits available for testing · "
+            f"{_summary['demo_reserve']} held for the demo"
+        )
+        allow_spend = st.checkbox(
+            "Permit spending this run",
+            value=False,
+            help="Leave off to see the policy gate in action — X reports "
+                 "blocked_policy and spends nothing.",
+        )
+        x_max_results = st.number_input("Max posts per query", 1, 50, 10, step=1)
+        x_cooldown = st.number_input(
+            "Seconds between calls", 0, 600, 30, step=10,
+            help="Measured from the last charge in the ledger, so it survives "
+                 "restarts. 0 disables it.",
+        )
+        if _summary["cooldown_remaining"] > 0:
+            st.caption(f"Cooldown: {_summary['cooldown_remaining']:g}s remaining")
+    else:
+        allow_spend, x_max_results, x_cooldown = False, 10, 30.0
+
 if submitted:
     if not topic.strip():
         st.sidebar.error("Enter a topic.")
@@ -429,6 +483,8 @@ if submitted:
             run, posts, bundle = _run_collection(
                 topic.strip(), start, end, tz_name, aliases, max_posts,
                 offline, retrieve_evidence, template, marking,
+                include_x=include_x, allow_spend=allow_spend,
+                x_max_results=x_max_results, x_cooldown=x_cooldown,
             )
         st.session_state["run_id"] = run.run_id
         st.session_state["flash"] = (
