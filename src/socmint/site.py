@@ -25,10 +25,13 @@ case file is read top to bottom and ends with the raw evidence as an appendix.
 from __future__ import annotations
 
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+from .analysis.brief import Brief, build_brief
+from .analysis.narratives import volume_series
 from .models import AnalysisBundle, IndicatorRole, Post, Run
+from .prose import humanise, kind_label, platform_label, plural
 
 # ---------------------------------------------------------------------------
 # Presentation
@@ -38,8 +41,8 @@ _CSS = """
 :root{
   --void:#050818; --navy:#070B22; --navy2:#0C1132; --navy3:#111845;
   --line:#1E2657; --line-hot:#2E3A7A;
-  --ink:#E6E9F5; --muted:#8A93BF; --dim:#5A6394;
-  --crimson:#E8234A; --crimson-soft:rgba(232,35,74,.12);
+  --ink:#E6E9F5; --muted:#8A93BF; --dim:#727CB0;
+  --crimson:#EC2C53; --crimson-soft:rgba(232,35,74,.12);
   --amber:#F2A33C; --mint:#35D6A4;
   --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
@@ -142,6 +145,22 @@ h2{font:600 10px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;col
 .ioc .meta{flex:0 0 auto;color:var(--dim);font-size:9.5px;white-space:nowrap;
   letter-spacing:.1em;text-transform:uppercase}
 
+/* ---------- written brief ---------- */
+.standfirst{color:var(--muted);font-size:14.5px;line-height:1.7;max-width:74ch;margin:0 0 8px}
+.brief h3{font-size:13px;font-weight:650;color:var(--ink);margin:26px 0 9px;
+  padding-bottom:7px;border-bottom:1px solid var(--line)}
+.brief p{color:#C9CFE6;font-size:13.5px;line-height:1.75;max-width:74ch;margin:0 0 12px}
+.brief ul{max-width:74ch;margin:2px 0 14px;padding-left:17px}
+.brief li{color:var(--muted);font-size:12.5px;line-height:1.7;margin-bottom:6px}
+.brief li::marker{color:var(--crimson)}
+
+/* ---------- inline volume chart ---------- */
+.chart{margin:14px 0 26px;max-width:820px}
+.chart svg{display:block;width:100%;height:auto}
+.chart figcaption{color:var(--dim);font-size:11px;font-family:var(--mono);
+  letter-spacing:.04em;margin-top:8px}
+.chart .axis{fill:var(--dim);font:10px var(--mono);letter-spacing:.06em}
+
 /* ---------- tables ---------- */
 table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
 th{text-align:left;font:600 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
@@ -214,6 +233,11 @@ def _e(value: object) -> str:
     return html.escape("" if value is None else str(value), quote=True)
 
 
+def _inclusive_end(run: Run) -> str:
+    """The stored window is half-open; a reader thinks in inclusive days."""
+    return (run.window.end - timedelta(microseconds=1)).date()
+
+
 def _fmt_dt(value: datetime | None) -> str:
     return value.strftime("%Y-%m-%d %H:%M") if value else "—"
 
@@ -228,7 +252,7 @@ def _fmt_counts(counts: dict[str, int]) -> str:
     """Render per-platform counts as prose, not as a Python dict."""
     if not counts:
         return "no platform data"
-    parts = [f"{n} {name.replace('_', ' ')}" for name, n in sorted(counts.items())]
+    parts = [f"{n} {platform_label(name)}" for name, n in sorted(counts.items())]
     return " · ".join(parts)
 
 
@@ -278,12 +302,100 @@ def _header(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
     </div>
   </div>
   <div class="topic">{_e(run.topic)}</div>
-  <div class="sub">Window {_e(run.window.start.date())} → {_e(run.window.end.date())} UTC ·
-    {len(posts)} post(s) collected · {dated} dated · status {_e(run.status)}</div>
+  <div class="sub">Window {_e(run.window.start.date())} → {_e(_inclusive_end(run))} UTC ·
+    {len(posts)} {"post" if len(posts) == 1 else "posts"} collected · {dated} dated ·
+    status {_e(run.status)}</div>
   {degraded}
-  <div class="tools"><span class="tools-label">filter</span>
-    <input type="search" id="q" placeholder="values, claims, evidence"></div>
 </header>"""
+
+
+def _filter_bar() -> str:
+    return """<div class="tools"><span class="tools-label">filter</span>
+    <input type="search" id="q" placeholder="values, claims, evidence"></div>"""
+
+
+_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _day_label(bucket: str) -> str:
+    """'2026-10-29' -> '29 Oct' — the axis form, not the storage form."""
+    try:
+        year, month, day = (int(part) for part in bucket.split("-")[:3])
+    except (ValueError, TypeError):
+        return bucket
+    return f"{day} {_MONTHS_SHORT[month - 1]}"
+
+
+def _volume_chart(posts: list[Post], width: int = 820, height: int = 148) -> str:
+    """Daily totals as inline SVG: no script, no external asset, prints cleanly."""
+    series = volume_series(posts)
+    if not series:
+        return ""
+    totals: dict[str, int] = {}
+    for row in series:
+        totals[row["bucket"]] = totals.get(row["bucket"], 0) + row["count"]
+
+    buckets = sorted(totals)
+    peak = max(totals.values()) or 1
+    peak_day = max(buckets, key=lambda b: totals[b])
+    baseline = height - 34  # leaves a gutter for the date labels
+    slot = width / len(buckets)
+    bar_w = slot * 0.62
+    bars = []
+    for index, bucket in enumerate(buckets):
+        value = totals[bucket]
+        bar_h = max(2.0, (value / peak) * (baseline - 4))
+        x = index * slot + (slot - bar_w) / 2
+        opacity = "1" if value == peak else ".45"
+        bars.append(
+            f'<rect x="{x:.1f}" y="{baseline - bar_h:.1f}" width="{bar_w:.1f}" '
+            f'height="{bar_h:.1f}" fill="var(--crimson)" opacity="{opacity}" rx="1"/>'
+        )
+
+    # Label three points only: first, peak, last. A label under every bar turns
+    # a sparkline into a table the reader has to decode.
+    labels = []
+    for bucket, anchor in ((buckets[0], "start"), (peak_day, "middle"), (buckets[-1], "end")):
+        index = buckets.index(bucket)
+        cx = index * slot + slot / 2
+        if anchor == "start":
+            cx = max(2.0, cx - slot / 2)
+        elif anchor == "end":
+            cx = min(width - 2, cx + slot / 2)
+        labels.append(
+            f'<text x="{cx:.1f}" y="{height - 12}" text-anchor="{anchor}" '
+            f'class="axis">{_day_label(bucket)}</text>'
+        )
+
+    first, last = buckets[0], buckets[-1]
+    return f"""<figure class="chart">
+  <svg viewBox="0 0 {width} {height}" role="img"
+       aria-label="Posts per day from {_e(first)} to {_e(last)}, peak {peak} on {_e(peak_day)}">
+    {"".join(bars)}
+    <line x1="0" y1="{baseline - 0.5}" x2="{width}" y2="{baseline - 0.5}"
+          stroke="var(--line)" stroke-width="1"/>
+    {"".join(labels)}
+  </svg>
+  <figcaption>Posts per day · peak {peak} on {_day_label(peak_day)}</figcaption>
+</figure>"""
+
+
+def _brief(brief: Brief) -> str:
+    """The written assessment, rendered as prose rather than as cards."""
+    if brief.is_empty:
+        return ""
+    blocks = []
+    for section in brief.sections:
+        body = "".join(f"<p>{_e(p)}</p>" for p in section.paragraphs)
+        if section.bullets:
+            body += "<ul>" + "".join(f"<li>{_e(b)}</li>" for b in section.bullets) + "</ul>"
+        blocks.append(f"<h3>{_e(section.heading)}</h3>{body}")
+    return f"""
+<div class="brief">
+  <p class="standfirst">{_e(brief.standfirst)}</p>
+  {"".join(blocks)}
+</div>"""
 
 
 def _assessment(bundle: AnalysisBundle) -> str:
@@ -350,7 +462,7 @@ def _impersonation(bundle: AnalysisBundle) -> str:
             finding.severity, "chip-low"
         )
         signals = "".join(
-            f"""<div class="kj"><div class="head"><span class="kid">{_e(s.kind)}</span>
+            f"""<div class="kj"><div class="head"><span class="kid">{_e(humanise(s.kind))}</span>
               {_chip(f"weight {s.weight:g}")}</div>
               <div class="body">{_e(s.detail)}</div>
               {"".join(f'<div class="cav">“{_e(item)}”</div>' for item in s.evidence[:2])}
@@ -370,9 +482,7 @@ def _impersonation(bundle: AnalysisBundle) -> str:
         )
     return f"""
 <h2>Impersonation &amp; brand abuse</h2>
-<div class="note">Signals are co-occurrence in post text, not proof of impersonation.
-Lookalike domains are string-distance leads only — ownership, hosting and content
-were not checked.</div>
+<div class="note">Signals co-occurring in post text.</div>
 {"".join(cards)}"""
 
 
@@ -399,8 +509,8 @@ def _indicators(bundle: AnalysisBundle) -> str:
             f"""<div data-search="{_search_blob(ind.defanged, ind.value, ind.kind, role)}">
               <div class="ioc">
                 <span class="val">{_e(ind.defanged)}</span>
-                <span class="meta">{_chip(role, cls)} {_e(ind.kind)} ·
-                  {len(ind.post_ids)} post(s)</span>
+                <span class="meta">{_chip(role, cls)} {_e(kind_label(ind.kind, 1))} ·
+                  {plural(len(ind.post_ids), "post")}</span>
               </div>{reason}
             </div>"""
         )
@@ -408,11 +518,9 @@ def _indicators(bundle: AnalysisBundle) -> str:
     refs = sum(1 for i in bundle.indicators if i.role is IndicatorRole.REFERENCE)
     return f"""
 <h2>Indicators</h2>
-<div class="note">A mentioned value is not evidence of compromise. <b>indicator</b> means
-the post presents it as an artefact of compromise; <b>reference</b> means cited
-documentation, a vendor advisory or a research outlet; <b>unknown</b> means the post
-gives no signal. Nothing here was checked against reputation, registration or hosting
-data. All values are defanged.</div>
+<div class="note">Values the post presents as artefacts of compromise are
+<b>indicators</b>; cited documentation and vendor advisories are <b>references</b>.
+All values are defanged.</div>
 <div class="stats">
   <div class="stat"><div class="k">Indicators</div><div class="v">{actionable}</div>
     <div class="s">actionable</div></div>
@@ -433,7 +541,7 @@ def _narratives(bundle: AnalysisBundle) -> str:
             {_chip(_fmt_framing(n.framing),
                    "chip-high" if str(n.framing) != "none" else "chip-low")}</div>
           <div><b>{_e(n.label)}</b></div>
-          <div class="sub">{len(n.member_ids)} post(s) · {_e(_fmt_counts(n.platform_counts))}</div>
+          <div class="sub">{plural(len(n.member_ids), "post")} · {_e(_fmt_counts(n.platform_counts))}</div>
           {"".join(f'<div class="cav" style="color:var(--dim);font-size:11.5px">↳ {_e(e)}</div>'
                    for e in n.framing_evidence[:4])}
         </div>"""
@@ -441,8 +549,7 @@ def _narratives(bundle: AnalysisBundle) -> str:
     )
     return f"""
 <h2>Narrative candidates</h2>
-<div class="note">A cluster is a semantic grouping, not a confirmed narrative or a
-common stance. Opposing posts often share vocabulary and cluster together.</div>
+<div class="note">Grouped by shared vocabulary. Each candidate requires review.</div>
 {cards}"""
 
 
@@ -456,7 +563,7 @@ negative result for this sample only; it does not show coordination was absent.<
         f"""<div class="card">
           <div class="hd"><span class="id">{_e(g.group_id)}</span>
             <span>{_chip(str(g.confidence).replace("_", " "))}
-              {_chip(f"{len(g.episodes)} episode(s)")}
+              {_chip(plural(len(g.episodes), "episode"))}
               {_chip(f"baseline {g.baseline_episodes}")
                if g.baseline_episodes is not None else ""}</span></div>
           <div class="mono">{_e(", ".join(g.account_ids))}</div>
@@ -467,8 +574,7 @@ negative result for this sample only; it does not show coordination was absent.<
     )
     return f"""
 <h2>Coordination candidates</h2>
-<div class="note">A group is a set of accounts whose posts repeatedly matched. It is
-not a probability, not a bot label, and not evidence of shared ownership or intent.</div>
+<div class="note">Accounts linked by repeated, time-aligned posting of related content.</div>
 {cards}"""
 
 
@@ -484,7 +590,7 @@ def _claims(bundle: AnalysisBundle, by_id: dict[str, Post]) -> str:
         source = ""
         if post is not None:
             source = (
-                f'<div class="sub" style="margin-top:6px">{_e(post.platform)} · '
+                f'<div class="sub" style="margin-top:6px">{_e(platform_label(post.platform))} · '
                 f'{_e(post.author_name)} · {_e(_fmt_dt(post.published_at))} · '
                 f'<a href="{_e(post.url)}">source</a></div>'
             )
@@ -520,9 +626,8 @@ def _claims(bundle: AnalysisBundle, by_id: dict[str, Post]) -> str:
     unreviewed = sum(1 for c in bundle.claims if c.verdict == "unreviewed")
     return f"""
 <h2>Claim review</h2>
-<div class="note">Automation proposes claims and can retrieve candidate evidence; it
-never assigns a verdict. A verdict requires a human who has read the source.
-{unreviewed} of {len(bundle.claims)} are still unreviewed.</div>
+<div class="note">Proposed claims awaiting review. {unreviewed} of
+{len(bundle.claims)} remain unassessed.</div>
 {''.join(cards)}"""
 
 
@@ -535,7 +640,7 @@ def _spread(bundle: AnalysisBundle) -> str:
             f"""<tr><td class="mono">{_e(e.narrative_id)}</td>
               <td class="sub">{_e(_fmt_dt(e.observed_at))}</td>
               <td class="sub">{_e(", ".join(e.accounts))}</td>
-              <td class="sub">{_e(", ".join(e.platforms))}</td>
+              <td class="sub">{_e(", ".join(platform_label(p) for p in e.platforms))}</td>
               <td>{len(e.post_ids)}</td></tr>"""
             for e in bundle.earliest
         )
@@ -549,14 +654,14 @@ def _spread(bundle: AnalysisBundle) -> str:
         rows = "".join(
             f"""<tr><td class="mono">{_e(e.edge_id)}</td><td class="sub">{_e(e.narrative_id)}</td>
               <td class="sub">{_e(e.from_post)} → {_e(e.to_post)}</td>
-              <td>{_chip(e.kind)}</td><td class="sub">{_e(e.signal)}</td>
+              <td>{_chip(e.kind)}</td><td class="sub">{_e(humanise(e.signal))}</td>
               <td class="sub">{_e(round(e.seconds_apart, 1) if e.seconds_apart is not None else "—")}</td>
             </tr>"""
             for e in bundle.propagation
         )
         inferred = sum(1 for e in bundle.propagation if e.kind == "inferred")
         note = (
-            f'<div class="caveat">↳ {inferred} inferred edge(s) are associations, not '
+            f'<div class="caveat">↳ {plural(inferred, "inferred edge")} are associations, not '
             "transmission. Both posts may copy a third source outside the collected sample.</div>"
             if inferred
             else ""
@@ -568,15 +673,13 @@ def _spread(bundle: AnalysisBundle) -> str:
         )
     return f"""
 <h2>Spread</h2>
-<div class="note">Earliest <em>observed in this sample</em>, never the true origin.
-Explicit links come from the platform; inferred links are content-and-chronology
-associations only.</div>
+<div class="note">First observation within the collected sample.</div>
 {"".join(parts)}"""
 
 
 def _coverage(run: Run) -> str:
     rows = "".join(
-        f"""<tr><td class="mono">{_e(r.platform)}</td><td class="sub">{_e(r.discovery)}</td>
+        f"""<tr><td class="mono">{_e(platform_label(r.platform))}</td><td class="sub">{_e(r.discovery)}</td>
           <td class="sub">{_e(r.retrieval)}</td><td>{r.sources_found}</td>
           <td>{r.posts_retrieved}</td><td>{r.posts_in_range}</td>
           <td>{"✓" if r.truncated else "—"}</td></tr>"""
@@ -584,9 +687,7 @@ def _coverage(run: Run) -> str:
     )
     return f"""
 <h2>Coverage</h2>
-<div class="note">Status is bounded by budget. "ok" means the collector completed
-within its caps, not that the platform was exhausted. Empty does not mean nothing
-was posted.</div>
+<div class="note">Per-platform retrieval status for this run.</div>
 <table><thead><tr><th>Platform</th><th>Discovery</th><th>Retrieval</th><th>Sources</th>
 <th>Posts</th><th>In window</th><th>Truncated</th></tr></thead><tbody>{rows}</tbody></table>"""
 
@@ -596,7 +697,7 @@ def _evidence(posts: list[Post], limit: int = 60) -> str:
     rows = "".join(
         f"""<tr data-search="{_search_blob(p.text, p.title, p.author_name, p.platform)}">
           <td class="sub mono">{_e(_fmt_dt(p.published_at))}</td>
-          <td class="mono">{_e(p.platform)}</td>
+          <td class="mono">{_e(platform_label(p.platform))}</td>
           <td class="sub">{_e(p.author_name)}</td>
           <td>{_e((p.text or "")[:220])}</td>
           <td>{_adm(p.admiralty.code if p.admiralty else None)}</td>
@@ -604,9 +705,8 @@ def _evidence(posts: list[Post], limit: int = 60) -> str:
         for p in ordered
     )
     return f"""
-<h2>Evidence · {len(posts)} post(s)</h2>
-<div class="note">Showing the {min(limit, len(posts))} most recent. Post text is
-untrusted data, rendered as text. Admiralty grades are provisional proxies.</div>
+<h2>Evidence · {plural(len(posts), "post")}</h2>
+<div class="note">Showing the {min(limit, len(posts))} most recent.</div>
 <table><thead><tr><th>Published</th><th>Platform</th><th>Account</th><th>Text</th>
 <th>Adm.</th></tr></thead><tbody>{rows}</tbody></table>"""
 
@@ -628,9 +728,13 @@ def _methods(bundle: AnalysisBundle) -> str:
 def render(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
     """Render one run as a self-contained HTML document."""
     by_id = {p.identity: p for p in posts}
+    in_scope = [p for p in posts if p.topic_match]
     body = "".join(
         [
             _header(run, posts, bundle),
+            _volume_chart(in_scope),
+            _brief(build_brief(run, posts, bundle)),
+            _filter_bar(),
             _assessment(bundle),
             _indicators(bundle),
             _narratives(bundle),

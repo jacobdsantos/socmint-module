@@ -1,6 +1,6 @@
 """Local analyst dashboard.
 
-Design intent: an AI-native case file, not an influence-graph poster. Deep navy
+Design intent: a case file an analyst reads, not an influence-graph poster. Deep navy
 with a crimson signal colour, monospace for anything machine-generated
 (indicators, hashes, Admiralty codes), and a terminal prompt in the masthead.
 Every number is click-through to the posts behind it, and every automated
@@ -23,14 +23,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from socmint import pipeline
+from socmint.analysis.brief import Brief, build_brief
 from socmint.analysis.narratives import volume_series
 from socmint.cli import _parse_bound
 from socmint.envfile import load_env_file
 from socmint.exports import export
 from socmint.models import TLP, CaseTemplate, DateRange
 from socmint.presets import PRESETS, catalogue
+from socmint.prose import humanise, kind_label, platform_label, plural
 from socmint.settings import AppConfig
-from socmint.spend import CreditLedger
 from socmint.store import Store
 
 DATA_DIR = Path("data")
@@ -189,6 +190,27 @@ CSS = """
     letter-spacing: .1em; text-transform: uppercase;
   }
 
+  /* ---------- written brief ---------- */
+  .standfirst {
+    color: var(--muted); font-size: 14px; line-height: 1.65;
+    max-width: 74ch; margin: 2px 0 26px 0;
+  }
+  .brief-h {
+    font-size: 13px !important; font-weight: 650; letter-spacing: -0.005em;
+    color: var(--ink) !important; margin: 30px 0 10px 0;
+    padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+  .brief-p {
+    color: #C9CFE6; font-size: 13.5px; line-height: 1.72;
+    max-width: 74ch; margin: 0 0 12px 0;
+  }
+  .brief-ul { max-width: 74ch; margin: 2px 0 16px 0; padding-left: 17px; }
+  .brief-ul li {
+    color: var(--muted); font-size: 12.5px; line-height: 1.68;
+    margin-bottom: 6px;
+  }
+  .brief-ul li::marker { color: var(--crimson); }
+
   /* ---------- section headers ---------- */
   .sec {
     font-size: 10px; letter-spacing: .24em; text-transform: uppercase;
@@ -337,7 +359,7 @@ def _evidence_card(post, quote: str | None = None) -> str:
     stamp = post.published_at.strftime("%Y-%m-%d %H:%M UTC") if post.published_at else "undated"
     return (
         f'<div class="ev"><div class="q">{body}</div>'
-        f'<div class="m">{_esc(post.platform)} · {_esc(post.author_name)} · {stamp} · '
+        f'<div class="m">{_esc(platform_label(post.platform))} · {_esc(post.author_name)} · {stamp} · '
         f'{rating} · <a href="{_esc(post.url)}">source</a></div></div>'
     )
 
@@ -393,9 +415,10 @@ def _volume_chart(posts, *, height: int = 220, legend: bool = False) -> go.Figur
             go.Bar(
                 x=buckets,
                 y=[lookup.get((bucket, platform), 0) for bucket in buckets],
-                name=platform.replace("_", " "),
+                name=platform_label(platform),
                 marker=dict(color=_platform_colour(platform), line=dict(width=0)),
-                hovertemplate="%{x}<br>%{y} post(s)<extra>" + platform + "</extra>",
+                hovertemplate="%{x}<br>%{y} posts<extra>"
+                + platform_label(platform) + "</extra>",
             )
         )
     fig.update_layout(
@@ -403,6 +426,8 @@ def _volume_chart(posts, *, height: int = 220, legend: bool = False) -> go.Figur
         showlegend=legend,
         legend=dict(orientation="h", y=1.14, x=0, bgcolor="rgba(0,0,0,0)"),
     )
+    # The window is in the header; repeating the year on every tick is noise.
+    fig.update_xaxes(tickformat="%-d %b")
     return fig
 
 
@@ -425,7 +450,7 @@ def _sparkline(posts) -> go.Figure | None:
             line=dict(color="#E8234A", width=1.6),
             fill="tozeroy",
             fillcolor="rgba(232,35,74,0.16)",
-            hovertemplate="%{x}: %{y} post(s)<extra></extra>",
+            hovertemplate="%{x}: %{y} posts<extra></extra>",
         )
     )
     fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
@@ -448,23 +473,40 @@ def _members(narrative, posts_by_id: dict) -> list:
     return [posts_by_id[i] for i in narrative.member_ids if i in posts_by_id]
 
 
-def _render_overview(run, in_scope, bundle, posts_by_id: dict) -> None:
+def _render_brief(brief: Brief) -> None:
+    """The written assessment: prose first, evidence behind it."""
+    if brief.standfirst:
+        st.markdown(
+            f'<p class="standfirst">{_esc(brief.standfirst)}</p>', unsafe_allow_html=True
+        )
+    for section in brief.sections:
+        st.markdown(
+            f'<h3 class="brief-h">{_esc(section.heading)}</h3>', unsafe_allow_html=True
+        )
+        for paragraph in section.paragraphs:
+            st.markdown(
+                f'<p class="brief-p">{_esc(paragraph)}</p>', unsafe_allow_html=True
+            )
+        if section.bullets:
+            items = "".join(f"<li>{_esc(b)}</li>" for b in section.bullets)
+            st.markdown(f'<ul class="brief-ul">{items}</ul>', unsafe_allow_html=True)
+
+
+def _render_overview(run, posts, in_scope, bundle) -> None:
     assessment = bundle.assessment
-    dated = sum(1 for p in in_scope if p.published_at)
     actionable = sum(1 for i in bundle.indicators if i.role.value == "indicator")
 
     tiles = st.columns(5)
     tiles[0].markdown(
-        _stat("Triage risk", f"{assessment.risk_score}" if assessment else "—",
-              "/ 100 · additive heuristic"),
+        _stat("Triage risk", f"{assessment.risk_score}" if assessment else "—", "of 100"),
         unsafe_allow_html=True,
     )
     tiles[1].markdown(
-        _stat("Narratives", len(bundle.narratives), "candidates · review required"),
+        _stat("Narratives", len(bundle.narratives), "semantic groups"),
         unsafe_allow_html=True,
     )
     tiles[2].markdown(
-        _stat("Account groups", len(bundle.coordination), "candidates · not verdicts"),
+        _stat("Account groups", len(bundle.coordination), "candidates"),
         unsafe_allow_html=True,
     )
     tiles[3].markdown(
@@ -473,105 +515,15 @@ def _render_overview(run, in_scope, bundle, posts_by_id: dict) -> None:
     )
     tiles[4].markdown(
         _stat("Claims", len(bundle.claims),
-              f"{sum(1 for c in bundle.claims if c.verdict == 'unreviewed')} unreviewed"),
+              f"{sum(1 for c in bundle.claims if c.verdict == 'unreviewed')} pending"),
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="sec">Volume over time</div>', unsafe_allow_html=True)
     chart = _volume_chart(in_scope, legend=True)
-    if chart is None:
-        st.info("No post carried a verified publication date, so no trend can be drawn.")
-    else:
+    if chart is not None:
         st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False})
-        st.markdown(
-            f'<div class="note">{len(in_scope)} in-scope post(s), {dated} dated. '
-            "Undated posts are excluded from the trend rather than guessed.</div>",
-            unsafe_allow_html=True,
-        )
 
-    st.markdown('<div class="sec">Main narratives</div>', unsafe_allow_html=True)
-    if not bundle.narratives:
-        st.info("No narrative candidates. The corpus may be too small or too homogeneous.")
-    for narrative in bundle.narratives[:6]:
-        members = _members(narrative, posts_by_id)
-        first = narrative.first_seen.strftime("%Y-%m-%d %H:%M") if narrative.first_seen else "—"
-        quote = ""
-        for pid in narrative.representative_ids[:1]:
-            post = posts_by_id.get(pid)
-            if post:
-                quote = (post.title or post.text or "")[:240]
-        st.markdown(
-            f'<div class="kj"><div class="head">'
-            f'<span class="kid">{_esc(narrative.narrative_id)}</span>'
-            f'<span class="chip">{len(members)} posts</span>'
-            f'<span class="chip">first {first} UTC</span>'
-            f'{_platform_chips(narrative.platform_counts)}</div>'
-            f'<div class="body"><strong>{_esc(narrative.label)}</strong></div>'
-            f'<div class="cav">“{_esc(quote)}”</div></div>',
-            unsafe_allow_html=True,
-        )
-        spark = _sparkline(members)
-        if spark is not None:
-            st.plotly_chart(spark, use_container_width=True, config={"displayModeBar": False})
-
-    st.markdown('<div class="sec">Accounts that appear to act together</div>', unsafe_allow_html=True)
-    if not bundle.coordination:
-        st.markdown(
-            '<div class="note">No account group met the repeated-evidence threshold in this '
-            "sample. That is a negative result for this sample, not proof of absence.</div>",
-            unsafe_allow_html=True,
-        )
-    for group in bundle.coordination[:4]:
-        reasons = "".join(
-            f'<div class="cav">· {_esc(s.kind.replace("_", " "))} — {_esc(s.detail)}</div>'
-            for s in group.signals[:4]
-        )
-        st.markdown(
-            f'<div class="kj"><div class="head">'
-            f'<span class="kid">{_esc(group.group_id)}</span>'
-            f'<span class="chip">{len(group.account_ids)} accounts</span>'
-            f'<span class="chip">{len(group.episodes)} episodes</span>'
-            f'<span class="chip">{_esc(str(group.confidence).replace("_", " "))}</span></div>'
-            f'<div class="body mono">{_esc(", ".join(group.account_ids))}</div>'
-            f"{reasons}</div>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div class="sec">Where it started</div>', unsafe_allow_html=True)
-    if not bundle.earliest:
-        st.markdown('<div class="note">No dated narrative to anchor a first observation.</div>',
-                    unsafe_allow_html=True)
-    for entry in bundle.earliest[:6]:
-        when = entry.observed_at.strftime("%Y-%m-%d %H:%M") if entry.observed_at else "—"
-        st.markdown(
-            f'<div class="note"><strong>{_esc(entry.narrative_id)}</strong> · first observed '
-            f"{when} UTC · {_esc(', '.join(entry.accounts) or 'unknown account')} · "
-            f"{_esc(', '.join(entry.platforms))}</div>",
-            unsafe_allow_html=True,
-        )
-    if bundle.earliest:
-        st.markdown(f'<div class="caveat">↳ {_esc(bundle.earliest[0].caveat)}</div>',
-                    unsafe_allow_html=True)
-
-    st.markdown('<div class="sec">How it spread</div>', unsafe_allow_html=True)
-    explicit = sum(1 for e in bundle.propagation if e.kind == "explicit")
-    inferred = sum(1 for e in bundle.propagation if e.kind == "inferred")
-    per_platform = Counter(str(p.platform) for p in in_scope)
-    st.markdown(
-        f'<div class="note">{len(per_platform)} platform(s) carried this topic · '
-        f"{explicit} explicit link(s) · {inferred} inferred link(s). "
-        "An inferred link is a content-and-chronology association, not transmission.</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="sec">What this page does not show</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="note">Account creation dates, reused profile photos and who amplified '
-        "whom are not available from these public surfaces, so they are absent rather than "
-        "estimated. Coordination is not intent. Extraction is not validation. Coverage is a "
-        "sample bounded by the run's caps.</div>",
-        unsafe_allow_html=True,
-    )
+    _render_brief(build_brief(run, posts, bundle))
 
 
 @st.cache_resource
@@ -643,7 +595,6 @@ def _run_collection(
 # ---------------------------------------------------------------------------
 
 st.sidebar.markdown("### <span style='color:#E8234A'>&gt;</span> new case", unsafe_allow_html=True)
-st.sidebar.caption("Topic-driven collection. Anonymous, budgeted, evidence-first.")
 
 with st.sidebar.form("run_form"):
     # Three inputs are all a demo needs. Everything else has a defensible
@@ -659,8 +610,7 @@ with st.sidebar.form("run_form"):
             "Case template",
             [entry["label"] for entry in catalogue()],
             index=0,
-            help="Frames the assessment and which threat patterns are in focus. "
-                 "It does not change what is collected.",
+            help="Frames the assessment and the threat patterns in focus.",
         )
         tlp_label = st.selectbox(
             "TLP marking",
@@ -670,8 +620,8 @@ with st.sidebar.form("run_form"):
         tz_name = st.selectbox(
             "Timezone", ["UTC", "Asia/Manila", "Asia/Singapore", "America/New_York"]
         )
-        max_posts = st.slider("Post cap per run", 50, 800, 250, step=50)
-        offline = st.checkbox("Lexical only (skip embedding model)", value=False)
+        max_posts = st.slider("Post limit", 50, 800, 250, step=50)
+        offline = st.checkbox("Fast mode", value=False, help="Groups by word overlap instead of semantics.")
         retrieve_evidence = st.checkbox("Retrieve candidate evidence for claims", value=False)
 
     submitted = st.form_submit_button("Run collection", type="primary")
@@ -679,37 +629,19 @@ with st.sidebar.form("run_form"):
 # Outside the form on purpose: a form batches its inputs, so a checkbox that
 # reveals more fields would only update on submit. Out here it reruns and the
 # controls appear immediately.
-with st.sidebar.expander("X / Twitter (metered)"):
+with st.sidebar.expander("X / Twitter"):
     include_x = st.checkbox(
         "Include X in this run",
         value=False,
-        help="X is the only metered source. One query costs 2 credits.",
+        help="Adds X posts to this run.",
     )
     if include_x:
         _config = AppConfig(data_dir=DATA_DIR)
-        _ledger = CreditLedger(get_store(), _config.credits)
-        _summary = _ledger.summary()
         if not _config.xpoz.configured:
-            # Better here than discovered in Coverage after a nine-minute run.
-            st.warning("XPOZ_API_KEY is not set — X will report unsupported.")
-        st.caption(
-            f"{_summary['available_for_testing']} credits available for testing · "
-            f"{_summary['demo_reserve']} held for the demo"
-        )
-        allow_spend = st.checkbox(
-            "Permit spending this run",
-            value=False,
-            help="Leave off to see the policy gate in action — X reports "
-                 "blocked_policy and spends nothing.",
-        )
-        x_max_results = st.number_input("Max posts per query", 1, 50, 10, step=1)
-        x_cooldown = st.number_input(
-            "Seconds between calls", 0, 600, 30, step=10,
-            help="Measured from the last charge in the ledger, so it survives "
-                 "restarts. 0 disables it.",
-        )
-        if _summary["cooldown_remaining"] > 0:
-            st.caption(f"Cooldown: {_summary['cooldown_remaining']:g}s remaining")
+            st.warning("X is not configured. Add an API key to enable it.")
+        allow_spend = st.checkbox("Allow paid queries", value=False)
+        x_max_results = st.number_input("Posts per query", 1, 50, 10, step=1)
+        x_cooldown = st.number_input("Seconds between queries", 0, 600, 30, step=10)
     else:
         allow_spend, x_max_results, x_cooldown = False, 10, 30.0
 
@@ -743,7 +675,7 @@ if not runs:
     st.markdown(
         '<div class="masthead"><div><div class="prompt">'
         '<span class="sigil">&gt;</span> socmint<span class="caret"></span></div>'
-        '<div class="mh-sub">AI-native social threat intelligence</div></div></div>',
+        '<div class="mh-sub">Social threat intelligence</div></div></div>',
         unsafe_allow_html=True,
     )
     st.info("No runs yet. Configure a topic and date range in the sidebar, then run a collection.")
@@ -784,7 +716,7 @@ template = assessment.case_template.value if assessment else run.case_template.v
 st.markdown(
     f'<div class="masthead"><div>'
     f'<div class="prompt"><span class="sigil">&gt;</span> socmint<span class="caret"></span></div>'
-    f'<div class="mh-sub">AI-native social threat intelligence</div></div>'
+    f'<div class="mh-sub">Social threat intelligence</div></div>'
     f'<div class="mh-right">'
     f'<span class="tlp {_tlp_class(marking)}">{_esc(marking)}</span>'
     f'<span class="badge">case · {_esc(template)}</span>'
@@ -836,7 +768,7 @@ if bundle.degraded:
 # --- Overview ---------------------------------------------------------------
 
 with tab_over:
-    _render_overview(run, in_scope, bundle, posts_by_id)
+    _render_overview(run, posts, in_scope, bundle)
 
 # --- Assessment -------------------------------------------------------------
 
@@ -865,8 +797,7 @@ with tab_case:
                 f'<div class="risk"><div class="k">Triage risk · additive heuristic</div>'
                 f'<div class="v">{assessment.risk_score}<span>/100</span></div>'
                 f'<div class="bar"><i style="width:{min(assessment.risk_score, 100)}%"></i></div>'
-                f'<div class="n">Not a probability. Recompute by hand from the factors below '
-                f'and disagree with any line.</div></div>',
+                f'<div class="n">Derived from the factors opposite.</div></div>',
                 unsafe_allow_html=True,
             )
             st.markdown('<div class="sec">Risk factors</div>', unsafe_allow_html=True)
@@ -897,7 +828,7 @@ with tab_case:
                 )
                 st.markdown(
                     f'<div class="kj"><div class="head">'
-                    f'<span class="kid">{_esc(signal.kind)}</span>'
+                    f'<span class="kid">{_esc(humanise(signal.kind))}</span>'
                     f'<span class="chip">weight {signal.weight:g}</span></div>'
                     f'<div class="body">{_esc(signal.detail)}</div>{evidence}</div>',
                     unsafe_allow_html=True,
@@ -914,12 +845,9 @@ with tab_case:
 with tab_indicators:
     st.markdown('<div class="sec">Technical values</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">A value being mentioned is not evidence of compromise. Each one '
-        'carries a role: <strong style="color:#E6E9F5">indicator</strong> means the post '
-        'presents it as an artefact of compromise, <strong style="color:#E6E9F5">reference'
-        '</strong> means it is cited documentation, a vendor advisory, or a research outlet, '
-        'and <strong style="color:#E6E9F5">unknown</strong> means the post gives no signal. '
-        'Nothing here was checked against reputation, registration, or hosting data.</div>',
+        '<div class="note">Values the post presents as artefacts of compromise are '
+        '<strong style="color:#E6E9F5">indicators</strong>; cited documentation and vendor '
+        'advisories are <strong style="color:#E6E9F5">references</strong>. All are defanged.</div>',
         unsafe_allow_html=True,
     )
     if not bundle.indicators:
@@ -960,10 +888,10 @@ with tab_indicators:
             }.get(indicator.role.value, "")
             st.markdown(
                 f'<div class="ioc"><span class="val">{_esc(indicator.defanged)}</span>'
-                f'<span class="meta">{_esc(indicator.kind.value)} · '
+                f'<span class="meta">{_esc(kind_label(indicator.kind.value))} · '
                 f'<span class="{role_class}" style="padding:0;border:0">'
                 f'{_esc(indicator.role.value)}</span> · '
-                f'{len(indicator.post_ids)} post(s) · {_esc(platforms)}</span></div>'
+                f'{plural(len(indicator.post_ids), "post")} · {_esc(platforms)}</span></div>'
                 f'<div class="caveat" style="margin:-2px 0 8px 0">↳ '
                 f'{_esc(indicator.role_reason)}</div>',
                 unsafe_allow_html=True,
@@ -993,9 +921,8 @@ with tab_indicators:
 with tab_narr:
     st.markdown('<div class="sec">Narrative candidates</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Semantic clusters, not verified narratives. Shared vocabulary is not '
-        'shared stance — opposing posts can cluster together. Confirm, split, or reject each one.'
-        '</div>',
+        '<div class="note">Grouped by shared vocabulary. Confirm, split or reject each '
+        'candidate.</div>',
         unsafe_allow_html=True,
     )
     if not bundle.narratives:
@@ -1055,16 +982,12 @@ with tab_narr:
 with tab_coord:
     st.markdown('<div class="sec">Coordination candidates</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Accounts linked by repeated, time-aligned shared content. This is a '
-        'lead, not a finding: coordination does not establish intent, automation, or common '
-        'ownership.</div>',
+        '<div class="note">Accounts linked by repeated, time-aligned posting of related '
+        'content.</div>',
         unsafe_allow_html=True,
     )
     if not bundle.coordination:
-        st.info(
-            "No account group met the repeated-evidence threshold. This is a valid result — "
-            "it means the collected sample did not show repeated cross-account overlap."
-        )
+        st.info("No group of accounts showed repeated, time-aligned posting in this sample.")
     for group in bundle.coordination:
         conf_cls = "chip-high" if group.confidence == "strong_candidate" else "chip-moderate"
         with st.expander(
@@ -1077,11 +1000,12 @@ with tab_coord:
                 unsafe_allow_html=True,
             )
             st.markdown(f"**Accounts** {', '.join(group.account_ids)}")
-            st.markdown("**Signals** " + ", ".join(f"{s.kind} ({s.detail})" for s in group.signals))
+            st.markdown("**Signals** " + ", ".join(f"{humanise(s.kind)} ({s.detail})" for s in group.signals))
             if group.baseline_episodes is not None:
                 st.markdown(
-                    f'<div class="caveat">Time-shuffle baseline: {group.baseline_episodes} '
-                    f'qualifying pair(s) arose by chance. Compare with the observed evidence.</div>',
+                    f'<div class="caveat">Time-shuffle baseline: '
+                    f'{plural(int(round(group.baseline_episodes)), "qualifying pair")} arose '
+                    'by chance. Compare with the observed evidence.</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1123,9 +1047,7 @@ with tab_coord:
 with tab_prop:
     st.markdown('<div class="sec">Earliest observed and spread</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Earliest <em>observed in this sample</em>, never the true origin. '
-        'Explicit links come from the platform; inferred links are content-and-chronology '
-        'associations only.</div>',
+        '<div class="note">First observation within the collected sample.</div>',
         unsafe_allow_html=True,
     )
     if bundle.earliest:
@@ -1171,10 +1093,7 @@ with tab_prop:
         )
         inferred = sum(1 for e in bundle.propagation if e.kind == "inferred")
         if inferred:
-            st.caption(
-                f"{inferred} inferred edge(s) are associations, not transmission. Both posts may "
-                "copy a third source outside the collected sample."
-            )
+            st.caption(f"{plural(inferred, 'inferred edge')} of {plural(len(edges), 'edge')}.")
     else:
         st.info("No propagation edges were established in this sample.")
 
@@ -1183,8 +1102,8 @@ with tab_prop:
 with tab_claims:
     st.markdown('<div class="sec">Claim review queue</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Automation proposes claims and can retrieve candidate evidence. It '
-        'never assigns a verdict. A verdict requires a human who has read the source.</div>',
+        '<div class="note">Proposed claims awaiting review. A verdict requires a reviewer who '
+        'has read the source.</div>',
         unsafe_allow_html=True,
     )
     if not bundle.claims:
@@ -1196,7 +1115,7 @@ with tab_claims:
                         unsafe_allow_html=True)
             if post:
                 st.markdown(
-                    f'<div class="m">{_esc(post.platform)} · {_esc(post.author_name)} · '
+                    f'<div class="m">{_esc(platform_label(post.platform))} · {_esc(post.author_name)} · '
                     f'{post.published_at} · <a href="{_esc(post.url)}">source</a></div>',
                     unsafe_allow_html=True,
                 )
@@ -1254,8 +1173,7 @@ with tab_cover:
 
     st.markdown('<div class="sec">Per-platform collection status</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Status is bounded by budget. “ok” means the collector completed '
-        'within its caps — not that the platform was exhausted.</div>',
+        '<div class="note">Per-platform retrieval status for this run.</div>',
         unsafe_allow_html=True,
     )
     st.dataframe(
@@ -1279,7 +1197,7 @@ with tab_cover:
         width="stretch",
     )
     for report in run.platforms:
-        with st.expander(f"{report.platform} notes ({len(report.notes)})"):
+        with st.expander(f"{platform_label(report.platform)} notes ({len(report.notes)})"):
             if report.notes:
                 for note in report.notes:
                     st.markdown(f"- {note}")
@@ -1305,8 +1223,8 @@ with tab_cover:
 with tab_posts:
     st.markdown('<div class="sec">Evidence table</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note">Every row links to the original public post. Engagement is a snapshot '
-        'at collection time. Admiralty grades are provisional.</div>',
+        '<div class="note">Every row links to the original post. Engagement is a snapshot at '
+        'collection time.</div>',
         unsafe_allow_html=True,
     )
     if posts:

@@ -42,6 +42,7 @@ from .models import (
     utcnow,
 )
 from .presets import resolve as resolve_preset
+from .prose import plural
 from .settings import AppConfig
 from .spend import CreditLedger
 from .store import Store
@@ -321,8 +322,8 @@ def analyse(
     excluded = len(posts) - len(in_scope)
     if excluded:
         bundle.method_notes.append(
-            f"{excluded} retrieved post(s) did not match the topic terms and were excluded "
-            "from narrative/coordination analysis (still present in the evidence export)"
+            f"{plural(excluded, 'retrieved post')} did not match the topic terms and were "
+            "excluded from narrative/coordination analysis (still present in the evidence export)"
         )
 
     narratives = narr_mod.build_narratives(

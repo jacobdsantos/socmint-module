@@ -20,6 +20,7 @@ from . import pipeline
 from .exports import export
 from .models import TLP, CaseTemplate, DateRange
 from .presets import catalogue
+from .prose import plural
 from .settings import AppConfig
 from .store import Store
 
@@ -113,6 +114,13 @@ def build_parser() -> argparse.ArgumentParser:
     site.add_argument("--out", required=True, help="output directory")
     site.add_argument("--data-dir", default="data")
 
+    reanalyse = sub.add_parser(
+        "reanalyse",
+        help="re-run analysis over an existing run's stored posts (no collection)",
+    )
+    reanalyse.add_argument("--run", required=True, dest="run_id")
+    reanalyse.add_argument("--data-dir", default="data")
+
     credits = sub.add_parser(
         "credits", help="show metered-API balance and spend history"
     )
@@ -204,6 +212,49 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"wrote {index}")
         print("deploy: wrangler pages deploy <out>   or   vercel deploy <out> --prod")
+        return 0
+
+    if args.command == "reanalyse":
+        db = Path(args.data_dir) / "socmint.db"
+        if not db.exists():
+            print(f"no database at {db}", file=sys.stderr)
+            return 2
+        config = AppConfig(data_dir=Path(args.data_dir))
+        with Store(db) as store:
+            run = store.load_run(args.run_id)
+            if run is None:
+                print(f"unknown run: {args.run_id}", file=sys.stderr)
+                return 2
+            posts = store.load_posts(args.run_id)
+            if not posts:
+                print(f"run {args.run_id} has no stored posts", file=sys.stderr)
+                return 2
+
+            # Analyst decisions live in their own table, not in the bundle, so
+            # they survive. Say so rather than leaving it to be discovered.
+            reviews = store.load_reviews(args.run_id)
+            if reviews:
+                print(
+                    f"note: {plural(len(reviews), 'analyst review')} kept; the bundle "
+                    "carries no verdicts of its own",
+                    file=sys.stderr,
+                )
+
+            # Analysis is derived from the stored posts, so it can be rebuilt
+            # without touching a collector or spending a credit. Source facts
+            # (the posts) are not modified; only the derived bundle is replaced.
+            bundle = pipeline.analyse(
+                posts,
+                topic=run.topic,
+                config=config,
+                aliases=run.aliases,
+                case_template=run.case_template,
+                tlp=run.tlp,
+            )
+            store.save_analysis(run.run_id, bundle)
+
+        print(f"reanalysed {run.run_id}")
+        _print_summary(run, posts, bundle)
         return 0
 
     if args.command == "credits":

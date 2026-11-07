@@ -31,6 +31,7 @@ import re
 from collections import defaultdict
 
 from ..models import Indicator, IndicatorKind, IndicatorRole, Post
+from ..prose import plural
 
 # ---------------------------------------------------------------------------
 # Extraction patterns
@@ -250,7 +251,13 @@ def _extract_raw(text: str) -> dict[IndicatorKind, set[str]]:
 
     for url in _URL_RE.findall(text):
         cleaned = url.rstrip(".,;:!?")
-        if _host_of(cleaned) not in _SERVICE_DOMAINS:
+        host = _host_of(cleaned)
+        # A host without a dot is not a hostname. Text truncated mid-URL leaves
+        # things like "https://www", which is a fragment of someone else's link,
+        # not an indicator -- and it would otherwise outrank real values.
+        if "." not in host:
+            continue
+        if host not in _SERVICE_DOMAINS:
             found[IndicatorKind.URL].add(cleaned)
 
     for email in _EMAIL_RE.findall(text):
@@ -422,8 +429,8 @@ def extract(posts: list[Post]) -> list[Indicator]:
     indicators = list(registry.values())
     for indicator in indicators:
         indicator.context = (
-            f"observed in {len(indicator.post_ids)} post(s) across "
-            f"{len(indicator.platform_counts)} platform(s); not validated"
+            f"observed in {plural(len(indicator.post_ids), 'post')} across "
+            f"{plural(len(indicator.platform_counts), 'platform')}; not validated"
         )
     # Indicators first, then unknowns, then references; within a role, the most
     # widely observed first — those are the pivots worth an analyst's time.

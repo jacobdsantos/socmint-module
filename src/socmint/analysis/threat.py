@@ -30,6 +30,7 @@ from ..models import (
     Post,
     ThreatFraming,
 )
+from ..prose import plural
 from ..text import normalise
 
 _FRAMING_TERMS: dict[ThreatFraming, set[str]] = {
@@ -175,7 +176,7 @@ def detect_impersonation(
             distance = _levenshtein(label, phrase)
             if 0 < distance <= 2 and abs(len(label) - len(phrase)) <= 2:
                 lookalikes[indicator.value].append(
-                    f"'{indicator.value}' is {distance} edit(s) from '{phrase}'"
+                    f"'{indicator.value}' is {plural(distance, 'edit')} from '{phrase}'"
                 )
         embedded = [w for w in words if w in label and label != w]
         if words_needed and len(embedded) >= words_needed:
@@ -266,7 +267,7 @@ def detect_impersonation(
         aggregated.append(
             ImpersonationSignal(
                 kind=exemplar.kind,  # type: ignore[arg-type]
-                detail=f"{exemplar.detail} (observed on {len(signals)} post(s))",
+                detail=f"{exemplar.detail} (observed on {plural(len(signals), 'post')})",
                 weight=exemplar.weight,
                 evidence=evidence[:3],
             )

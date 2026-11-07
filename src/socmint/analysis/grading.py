@@ -29,6 +29,7 @@ from ..models import (
     NarrativeCandidate,
     Post,
 )
+from ..prose import plural
 
 # Name patterns that suggest an established newsroom. This is a heuristic proxy,
 # not verification: a channel can call itself "News" and be entirely fabricated.
@@ -73,11 +74,12 @@ def _source_grade(posts_by_account: dict[str, list[Post]]) -> dict[str, Admiralt
             )
         else:
             grade, why = AdmiraltySource.F, (
-                f"anonymous or low-volume account ({count} post(s)); reliability cannot be judged"
+                f"anonymous or low-volume account ({plural(count, 'post')}); "
+                "reliability cannot be judged"
             )
 
         if hedge_hits and grade in {AdmiraltySource.C, AdmiraltySource.D}:
-            why += f"; {hedge_hits} post(s) used hedging/rumour language"
+            why += f"; {plural(hedge_hits, 'post')} used hedging/rumour language"
 
         grades[account] = AdmiraltyRating(
             source=grade, info=AdmiraltyInfo.SIX, provisional=True, rationale=why

@@ -19,6 +19,7 @@ from datetime import datetime
 import numpy as np
 
 from ..models import NarrativeCandidate, Post
+from ..prose import agreement, plural
 from ..settings import AnalysisSettings
 from ..text import distinctive_keywords, keywords, truncate
 
@@ -194,8 +195,9 @@ def build_narratives(
     skipped = len(posts) - len(eligible)
     if skipped:
         result.notes.append(
-            f"{skipped} post(s) below the {settings.min_text_chars}-character minimum were "
-            "not clustered (kept as singleton evidence)"
+            f"{plural(skipped, 'post')} below the {settings.min_text_chars}-character "
+            f"minimum {agreement(skipped, 'was', 'were')} not clustered "
+            "(kept as singleton evidence)"
         )
     if not eligible:
         result.notes.append("no posts had enough text for narrative grouping")

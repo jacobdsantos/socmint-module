@@ -501,3 +501,47 @@ coordination section therefore reports what was observed — near-identical text
 semantic similarity, posting within a window, shared URLs, repeated episodes —
 and the Overview says plainly which of the expected signals are absent rather
 than estimating them.
+
+---
+
+## 19. Analyst-facing copy is not a format string
+
+Every count in the product read `3 post(s)`, `1 episode(s)`, `2 account
+group(s)`. The intent was to avoid a plural bug; the effect was that the case
+file announced itself as generated output. A reader notices `post(s)` the way
+they notice a stray `</div>` — it is the tell that nobody looked at the page.
+
+**The rule.** A reader sees `1 post`, `3 posts`, `1 episode`, `2 episodes`. The
+verb agrees too: `1 post was excluded`, never `1 post were excluded`. That is
+two problems, not one, which is why `socmint/prose.py` exposes both `plural()`
+and `agreement()` rather than only the noun. A single `plural()` that returns
+`1 post` still produces `1 post were excluded` — a worse tell than the original,
+because it reads as a typo rather than as tooling.
+
+Both surfaces import the same helpers, so the dashboard and the published case
+file cannot drift apart.
+
+**Aggregated, not enumerated.** The assessment listed framings once per
+narrative: `hacktivism (87 posts), hacktivism (51 posts), hacktivism (50 posts)`.
+Three hacktivist clusters are one observation about the corpus, so the line now
+sums by framing: `hacktivism (375 posts) and fraud (137 posts)`. Repetition in a
+list reads as a rendering fault; aggregation reads as a finding.
+
+---
+
+## 20. Re-analysis must not require re-collection
+
+The stored bundle holds the rendered judgement strings, not the inputs to them.
+Fixing a sentence in `assessment.py` therefore changed nothing in an existing
+run — the old text was already committed to the database. The only way to see
+the fix was to collect again, and collection spends credits.
+
+**Analysis is derived; collection is not.** `socmint reanalyse --run <id>`
+reloads the stored posts and rebuilds the bundle through the same `analyse()`
+the collector uses. The posts are not touched. No collector is called and no
+credit is spent.
+
+Analyst reviews live in their own table rather than in the bundle, so they
+survive; the command says so when reviews exist rather than leaving it to be
+discovered. Source facts stay immutable, and the derived layer is rebuilt from
+them — which is the correct direction for a change to be able to flow.

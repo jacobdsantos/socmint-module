@@ -44,6 +44,7 @@ from ..models import (
     QueryLog,
     StageStatus,
 )
+from ..prose import plural
 from ..settings import Budgets, XpozCredentials
 from ..spend import CreditLedger
 from ..text import topic_match_terms
@@ -290,7 +291,7 @@ def collect(
                 logger.debug("xpoz client close failed", exc_info=True)
 
     log.status = StageStatus.OK
-    log.detail = f"{len(raw_posts)} result(s)"
+    log.detail = plural(len(raw_posts), "result")
     result.queries.append(log)
 
     # The API can return the same post twice in one page; the module's
@@ -320,7 +321,7 @@ def collect(
     result.status = StageStatus.OK if result.posts else StageStatus.EMPTY
     if not result.posts:
         result.notes.append("X returned no in-window post for this query")
-    result.notes.append(f"capped at {limit} result(s) per query")
+    result.notes.append(f"capped at {plural(limit, 'result')} per query")
     return result
 
 

@@ -16,12 +16,12 @@ Three layers of checking, in increasing order of how much they cost:
 
 ## 1. Automated tests
 
-**216 tests, all passing, 84% statement coverage** across `src/socmint`
+**227 tests, all passing, 84% statement coverage** across `src/socmint`
 (`pytest --cov=src/socmint --cov-report=term-missing`).
 
 Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
-100%, `models.py` 99%, `assessment.py` 96%, `grading.py` 95%, `threat.py` 94%,
-`indicators.py` 84%.
+100%, `prose.py` 100%, `models.py` 99%, `assessment.py` 97%, `grading.py` 97%,
+`threat.py` 94%, `indicators.py` 85%.
 
 | Area | What is asserted |
 |---|---|
@@ -35,6 +35,7 @@ Coverage on the cyber-threat-intelligence modules specifically: `presets.py`
 | Pipeline | Dedupe, language enrichment, in-scope filtering, end-to-end wiring |
 | Exports + demo | Artefact set, no-overwrite, Admiralty columns, assessment output |
 | CLI | Date parsing (inclusive local day → half-open UTC), invalid ranges |
+| Presentation copy | Noun and verb agreement, storage keys rendered as reader-facing labels |
 
 What the tests deliberately do **not** cover: live network behaviour. Network
 tests are marked and skipped by default, because a flaky external dependency in
@@ -384,7 +385,7 @@ worse than stating the gap.
 ## 8. Reproduction
 
 ```bash
-.venv/bin/pytest -q                                   # 216 tests
+.venv/bin/pytest -q                                   # 227 tests
 .venv/bin/pytest -q --cov=src/socmint --cov-report=term-missing
 .venv/bin/socmint demo --export exports               # labelled synthetic scenario
 .venv/bin/socmint run --topic "<topic>" --start <date> --end <date> --export exports

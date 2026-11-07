@@ -23,6 +23,7 @@ from ..models import (
     ThreatFraming,
 )
 from ..presets import resolve
+from ..prose import agreement, kind_label, listing, plural
 
 # Point values. Deliberately coarse: false precision in a heuristic invites
 # over-reading.
@@ -46,14 +47,14 @@ def _risk(
         points = min(_COORD_STRONG * len(strong), 50)
         score += points
         factors.append(
-            f"+{points}: {len(strong)} coordination group(s) met the strong-candidate "
+            f"+{points}: {plural(len(strong), 'coordination group')} met the strong-candidate "
             "threshold with repeated matched episodes"
         )
     if candidate:
         points = min(_COORD_CANDIDATE * len(candidate), 20)
         score += points
         factors.append(
-            f"+{points}: {len(candidate)} coordination group(s) met the weaker "
+            f"+{points}: {plural(len(candidate), 'coordination group')} met the weaker "
             "candidate threshold only"
         )
 
@@ -65,7 +66,7 @@ def _risk(
         points = min(_FRAMING_IN_FOCUS * len(in_focus), 20)
         score += points
         factors.append(
-            f"+{points}: narrative language matched in-focus framing(s): "
+            f"+{points}: narrative language matched in-focus framings: "
             + ", ".join(f.value for f in in_focus)
         )
 
@@ -88,7 +89,8 @@ def _risk(
         points = min(_INDICATOR_BONUS * len(risky), 15)
         score += points
         factors.append(
-            f"+{points}: high-value indicator kind(s) present: " + ", ".join(risky)
+            f"+{points}: high-value indicator kinds present: "
+            + listing([kind_label(kind, 1) for kind in risky])
         )
 
     if bundle.degraded:
@@ -121,15 +123,25 @@ def _judgements(
 
     in_scope = [p for p in posts if p.topic_match]
     if bundle.narratives:
-        framed = [n for n in bundle.narratives if n.framing is not ThreatFraming.NONE]
-        detail = ", ".join(
-            f"{n.framing.value} ({len(n.member_ids)} posts)" for n in framed[:4]
+        # One line per framing, not one per narrative: three hacktivist clusters
+        # are one observation about the corpus, and repeating the word three
+        # times in a row reads like a rendering bug.
+        by_framing: dict[str, int] = {}
+        for narrative in bundle.narratives:
+            if narrative.framing is ThreatFraming.NONE:
+                continue
+            key = narrative.framing.value
+            by_framing[key] = by_framing.get(key, 0) + len(narrative.member_ids)
+        detail = listing(
+            [f"{name} ({plural(count, 'post')})" for name, count in
+             sorted(by_framing.items(), key=lambda kv: -kv[1])]
         )
         add(
-            f"{len(bundle.narratives)} narrative cluster(s) were identified across "
-            f"{len(in_scope)} in-scope post(s)"
+            f"{plural(len(bundle.narratives), 'narrative cluster')} "
+            f"{agreement(len(bundle.narratives), 'was', 'were')} identified "
+            f"across {plural(len(in_scope), 'in-scope post')}"
             + (f"; framings observed: {detail}" if detail else "; no threat framing matched"),
-            "moderate" if framed else "low",
+            "moderate" if by_framing else "low",
             [n.narrative_id for n in bundle.narratives[:5]],
             [
                 "A cluster is a semantic grouping, not a confirmed narrative or a "
@@ -144,9 +156,9 @@ def _judgements(
         )
         baseline = strongest.baseline_episodes
         add(
-            f"{len(bundle.coordination)} account group(s) showed repeated matched "
-            f"behaviour; the largest has {len(strongest.account_ids)} accounts over "
-            f"{len(strongest.episodes)} matched episode(s)"
+            f"{plural(len(bundle.coordination), 'account group')} showed repeated "
+            f"matched behaviour; the largest has {plural(len(strongest.account_ids), 'account')} "
+            f"over {plural(len(strongest.episodes), 'matched episode')}"
             + (
                 f", against a time-shuffle baseline of {baseline:.1f}"
                 if isinstance(baseline, (int, float))
@@ -177,18 +189,24 @@ def _judgements(
         for indicator in actionable:
             kinds[indicator.kind.value] = kinds.get(indicator.kind.value, 0) + 1
         if actionable:
+            count = len(actionable)
+            by_kind = listing(
+                [f"{v} {kind_label(k, v)}" for k, v in sorted(kinds.items(), key=lambda kv: -kv[1])]
+            )
             statement = (
-                f"{len(actionable)} technical indicator(s) were extracted: "
-                + ", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))
+                f"{plural(count, 'technical indicator')} "
+                f"{agreement(count, 'was', 'were')} extracted: {by_kind}"
             )
         elif references:
             statement = "No technical indicators were extracted"
         else:
             statement = "No value in this sample carried enough context to be judged an indicator"
         if references:
+            refs = len(references)
             statement += (
-                f"; {len(references)} cited reference(s) were classified as references "
-                "and excluded from the indicator set"
+                f"; {plural(refs, 'cited reference')} "
+                f"{'was' if refs == 1 else 'were'} classified as references and "
+                "excluded from the indicator set"
             )
         add(
             statement,
@@ -206,7 +224,7 @@ def _judgements(
     if bundle.impersonation:
         finding = bundle.impersonation[0]
         add(
-            f"Impersonation signals appeared on {len(finding.post_ids)} post(s) "
+            f"Impersonation signals appeared on {plural(len(finding.post_ids), 'post')} "
             f"({finding.severity} severity, {finding.confidence} confidence)",
             "low",
             finding.post_ids[:5],
@@ -247,9 +265,9 @@ def synthesise(
 
     headline = topic.strip() or "untitled case"
     if bundle.narratives:
-        headline = f"{headline} — {len(bundle.narratives)} narrative cluster(s)"
+        headline = f"{headline} — {plural(len(bundle.narratives), 'narrative cluster')}"
     if bundle.coordination:
-        headline += f", {len(bundle.coordination)} coordination candidate(s)"
+        headline += f", {plural(len(bundle.coordination), 'coordination candidate')}"
 
     return Assessment(
         case_template=preset.template,

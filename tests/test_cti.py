@@ -109,6 +109,19 @@ def test_every_extracted_indicator_is_defanged() -> None:
         assert "." not in indicator.defanged or "[.]" in indicator.defanged
 
 
+def test_a_url_fragment_is_not_an_indicator() -> None:
+    """Text truncated mid-URL leaves "https://www", which is not a hostname.
+
+    It is common enough in real corpora to outrank genuine values, so it must
+    not reach the indicator set at all.
+    """
+    found = indicators.extract_from_text("mirror at https://www. and nothing else")
+    assert not found[IndicatorKind.URL]
+
+    kept = indicators.extract_from_text("mirror at https://ok.example.com/x")
+    assert kept[IndicatorKind.URL] == {"https://ok.example.com/x"}
+
+
 # ---------------------------------------------------------------------------
 # Threat framing
 # ---------------------------------------------------------------------------
@@ -459,8 +472,8 @@ def test_assessment_reports_excluded_references() -> None:
     ]
     result = assess_mod.synthesise(bundle, [], template=CaseTemplate.CUSTOM)
     statement = " ".join(j.statement for j in result.key_judgements)
-    assert "1 technical indicator(s)" in statement
-    assert "1 cited reference(s) were classified as references" in statement
+    assert "1 technical indicator was extracted" in statement
+    assert "1 cited reference was classified as references" in statement
 
 
 def test_assessment_with_only_references_says_so_plainly() -> None:
@@ -476,5 +489,5 @@ def test_assessment_with_only_references_says_so_plainly() -> None:
     result = assess_mod.synthesise(bundle, [], template=CaseTemplate.CUSTOM)
     statement = " ".join(j.statement for j in result.key_judgements)
     assert "No technical indicators were extracted" in statement
-    assert "2 cited reference(s)" in statement
-    assert "0 technical indicator(s)" not in statement
+    assert "2 cited references" in statement
+    assert "0 technical indicators" not in statement

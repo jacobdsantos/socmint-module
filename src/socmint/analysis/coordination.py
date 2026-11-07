@@ -30,6 +30,7 @@ from ..models import (
     CoordinationSignal,
     Post,
 )
+from ..prose import agreement, plural
 from ..settings import AnalysisSettings
 from ..text import content_tokens, jaccard, normalise
 
@@ -156,8 +157,9 @@ def _build_episodes(
 
     if discounted:
         notes.append(
-            f"{discounted} feature(s) used by more than {max_prevalence} accounts were "
-            "discounted as generic (e.g. widely shared links or boilerplate)."
+            f"{plural(discounted, 'feature')} used by more than {max_prevalence} accounts "
+            f"{agreement(discounted, 'was', 'were')} discounted as generic "
+            "(e.g. widely shared links or boilerplate)."
         )
     return episodes, prevalence, notes
 
@@ -307,7 +309,7 @@ def detect(
             episodes.setdefault(pair, []).extend(eps)
         if semantic:
             result.notes.append(
-                f"{len(semantic)} account pair(s) matched on semantic similarity within "
+                f"{plural(len(semantic), 'account pair')} matched on semantic similarity within "
                 f"{settings.coordination_time_window_seconds / 60:.0f} minutes"
             )
 
@@ -354,7 +356,7 @@ def detect(
             confidence = "strong_candidate"
         if prolific:
             limitations.append(
-                "high-volume account(s) present "
+                "high-volume accounts present "
                 f"({', '.join(prolific)}); repeated posting alone can create matches"
             )
         limitations.append(
@@ -369,7 +371,7 @@ def detect(
                 platform=platform,
                 episodes=group_eps[:40],
                 signals=[
-                    CoordinationSignal(kind=kind, detail=f"{count} episode(s)", weight=count)
+                    CoordinationSignal(kind=kind, detail=plural(count, "episode"), weight=count)
                     for kind, count in signals.items()
                 ],
                 confidence=confidence,
@@ -391,7 +393,7 @@ def detect(
             else "observed overlap exceeds the chance baseline"
         )
         result.notes.append(
-            f"time-shuffle baseline averaged {baseline:.1f} qualifying pair(s) vs "
-            f"{len(qualifying)} observed pair(s): {verdict}."
+            f"time-shuffle baseline averaged {baseline:.1f} qualifying pairs vs "
+            f"{plural(len(qualifying), 'observed pair')}: {verdict}."
         )
     return result

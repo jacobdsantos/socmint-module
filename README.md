@@ -261,6 +261,16 @@ working link without logging in, and prints a claim URL to keep it.
 .venv/bin/socmint show <run-id>
 ```
 
+### Rebuild the analysis without collecting again
+
+```bash
+.venv/bin/socmint reanalyse --run <run-id>
+```
+
+The bundle is derived from the stored posts, so a change to the analysis or to
+its wording can be applied to an existing run without calling a collector or
+spending a credit. Posts are not modified and analyst reviews are kept.
+
 ### Dashboard
 
 ```bash
@@ -426,7 +436,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 216 offline tests, 84% statement coverage.
+- 227 offline tests, 84% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

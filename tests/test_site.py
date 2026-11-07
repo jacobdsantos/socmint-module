@@ -122,7 +122,7 @@ def test_export_writes_an_index_and_refuses_to_overwrite(tmp_path) -> None:
 def test_an_empty_case_still_renders(tmp_path) -> None:
     index = export_site(_run(), [], AnalysisBundle(), tmp_path / "empty")
     html = index.read_text(encoding="utf-8")
-    assert "Evidence · 0 post(s)" in html
+    assert "Evidence · 0 posts" in html
 
 
 # --- sections that only appear when the analysis produced something ----------
@@ -231,7 +231,9 @@ def test_impersonation_renders_with_severity_and_caveats() -> None:
     ]
     html = render(_run(), [_post()], bundle)
     assert "imp001" in html and "Acme Bank" in html
-    assert "lookalike_domain" in html
+    # The reader sees the label, not the storage key.
+    assert "lookalike domain" in html
+    assert "lookalike_domain" not in html
     assert "medium severity" in html
     assert "no registration check" in html
 
@@ -249,7 +251,9 @@ def test_a_boilerplate_unknown_reason_is_not_repeated_on_every_row() -> None:
     ]
     html = render(_run(), [_post()], bundle)
     assert "x[.]example" in html
-    assert "no signal either way" not in html
+    # The brief may state it once in prose; what must not happen is the same
+    # sentence repeated under every indicator row.
+    assert html.count("no signal either way") <= 1
 
 
 def test_method_notes_and_degraded_state_are_surfaced() -> None:

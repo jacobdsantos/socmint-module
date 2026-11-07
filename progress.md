@@ -270,3 +270,48 @@ wins, and the sidebar warns before a run rather than after it.
 Verified on the `binance hack` run: 16 narratives, 2 account groups, 16 first
 observations, 25 claims, 222 indicators, chart and sparklines rendering at 1600
 wide. 216 tests pass; ruff clean.
+
+---
+
+## UI/UX professionalism pass
+
+**Internal decisions are not content.** The masthead caption ("Topic-driven
+collection. Anonymous, budgeted, evidence-first."), the word "metered", and the
+"What this page does not show" block explained the tool's design to the reader.
+A reader wants the finding, not the reasoning behind the interface. Removed from
+both surfaces; the reasoning lives in `docs/methodology.md`, which is where
+someone who wants it should look.
+
+**The Overview is a written correlation, not a card wall.** `analysis/brief.py`
+assembles a brief — Situation, What is being said, Account activity, Technical
+indicators, Claims, Collection — from the stored bundle. It is deterministic:
+no model summarises anything, and every sentence traces to a record. The same
+brief renders in the dashboard Overview tab and at the top of the published case
+file, so the two cannot drift.
+
+**`post(s)` is a format string, not copy.** Twenty-odd analyst-facing strings
+rendered counts as `3 post(s)`, `1 episode(s)`, `2 account group(s)`. A reader
+notices that the way they notice a stray `</div>`. `socmint/prose.py` now owns
+noun agreement (`1 post` / `3 posts`), verb agreement (`1 post was` / `3 posts
+were`), reader-facing kind names (`telegram_handle` → `Telegram handle`) and
+platform proper nouns (`google_news` → `Google News`). The assessment also sums
+framings instead of listing them per narrative, so three hacktivist clusters read
+as `hacktivism (375 posts)` rather than the same word three times.
+
+**`--dim` failed contrast.** The token used for every small label — axis dates,
+figcaptions, table headers, card IDs — sat at 3.38:1 on the page background.
+That is why the chart's date labels looked clipped: the lower half of each glyph
+was blending into the dark. Raised to 4.84:1. `--crimson` as small mono text was
+4.42:1 and moved to 4.68:1. Both now clear AA.
+
+**The volume chart carries dates.** Three labels only — first, peak, last. A
+label under every bar turns a sparkline into a table the reader has to decode.
+
+**`socmint reanalyse`.** The stored bundle holds rendered judgement strings, so a
+copy fix could only be seen by collecting again — which spends credits. Analysis
+is derived from stored posts, so `reanalyse --run <id>` rebuilds it without
+touching a collector. Posts are untouched and analyst reviews are kept.
+
+Verified on the `binance hack` run: 0 occurrences of `post(s)` in the exported
+case file, 0 raw storage keys in rendered output, chart labels legible at 1440
+wide. 227 tests pass, 84% coverage, ruff clean.
