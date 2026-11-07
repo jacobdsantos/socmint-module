@@ -28,10 +28,11 @@ import html
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .analysis.brief import Brief, build_brief
+from .analysis.brief import Brief, BriefSection, build_brief
 from .analysis.narratives import volume_series
 from .models import AnalysisBundle, IndicatorRole, Post, Run
 from .prose import humanise, kind_label, platform_label, plural
+from .summary import ModelSummary
 
 # ---------------------------------------------------------------------------
 # Presentation
@@ -153,6 +154,21 @@ h2{font:600 10px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;col
 .brief ul{max-width:74ch;margin:2px 0 14px;padding-left:17px}
 .brief li{color:var(--muted);font-size:12.5px;line-height:1.7;margin-bottom:6px}
 .brief li::marker{color:var(--crimson)}
+
+/* ---------- model summary beside the brief ---------- */
+.two-up{display:grid;grid-template-columns:1fr;gap:16px;margin:6px 0 26px;
+  align-items:start;max-width:850px}
+/* Two columns only where each one still holds a readable measure. Below this
+   the panels stack: side by side at 768 squeezes prose to about 45 characters. */
+@media (min-width:1000px){.two-up{grid-template-columns:1fr 1fr;gap:22px}}
+.panel{background:var(--navy2);border:1px solid var(--line);border-radius:6px;
+  padding:18px 20px 20px}
+.panel h3{margin-top:0}
+.panel .provenance{color:var(--dim);font-size:10.5px;font-family:var(--mono);
+  letter-spacing:.05em;margin:-2px 0 12px}
+.panel.model .generated{color:var(--ink);font-size:13.5px;line-height:1.72;
+  max-width:68ch;margin:0}
+.brief.continuation{margin-top:0}
 
 /* ---------- inline volume chart ---------- */
 .chart{margin:14px 0 26px;max-width:820px}
@@ -381,21 +397,62 @@ def _volume_chart(posts: list[Post], width: int = 820, height: int = 148) -> str
 </figure>"""
 
 
+def _section(section: BriefSection) -> str:
+    body = "".join(f"<p>{_e(p)}</p>" for p in section.paragraphs)
+    if section.bullets:
+        body += "<ul>" + "".join(f"<li>{_e(b)}</li>" for b in section.bullets) + "</ul>"
+    return f"<h3>{_e(section.heading)}</h3>{body}"
+
+
 def _brief(brief: Brief) -> str:
     """The written assessment, rendered as prose rather than as cards."""
     if brief.is_empty:
         return ""
-    blocks = []
-    for section in brief.sections:
-        body = "".join(f"<p>{_e(p)}</p>" for p in section.paragraphs)
-        if section.bullets:
-            body += "<ul>" + "".join(f"<li>{_e(b)}</li>" for b in section.bullets) + "</ul>"
-        blocks.append(f"<h3>{_e(section.heading)}</h3>{body}")
     return f"""
 <div class="brief">
   <p class="standfirst">{_e(brief.standfirst)}</p>
-  {"".join(blocks)}
+  {"".join(_section(s) for s in brief.sections)}
 </div>"""
+
+
+def _two_up(summary: ModelSummary | None, brief: Brief) -> str:
+    """The model summary beside the brief's opening, as peers.
+
+    Not a headline over the brief: a reader should see two readings of the same
+    findings, each labelled, neither presented as the conclusion. The remaining
+    sections continue full width beneath, so nothing is squeezed into a column.
+    """
+    if summary is None or not brief.sections:
+        return ""
+    opening, rest = brief.sections[0], brief.sections[1:]
+    remainder = (
+        f'<div class="brief continuation">{"".join(_section(s) for s in rest)}</div>'
+        if rest
+        else ""
+    )
+    return f"""
+<p class="standfirst">{_e(brief.standfirst)}</p>
+<div class="two-up">
+  <section class="panel model">
+    <h3>Model summary</h3>
+    <p class="provenance">{_e(summary.provenance)} · condenses the findings below</p>
+    <p class="generated">{_e(summary.text)}</p>
+  </section>
+  <section class="panel">
+    <h3>{_e(opening.heading)}</h3>
+    <p class="provenance">Derived directly from the collected records</p>
+    {_section_body(opening)}
+  </section>
+</div>
+{remainder}"""
+
+
+def _section_body(section: BriefSection) -> str:
+    """The body of a section, without repeating its heading."""
+    body = "".join(f"<p>{_e(p)}</p>" for p in section.paragraphs)
+    if section.bullets:
+        body += "<ul>" + "".join(f"<li>{_e(b)}</li>" for b in section.bullets) + "</ul>"
+    return body
 
 
 def _assessment(bundle: AnalysisBundle) -> str:
@@ -725,15 +782,27 @@ def _methods(bundle: AnalysisBundle) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
-    """Render one run as a self-contained HTML document."""
+def render(
+    run: Run,
+    posts: list[Post],
+    bundle: AnalysisBundle,
+    summary: ModelSummary | None = None,
+) -> str:
+    """Render one run as a self-contained HTML document.
+
+    ``summary`` is optional. Without it the page is the deterministic brief
+    exactly as before; with it, the model's paragraph sits beside the brief's
+    opening rather than above it.
+    """
     by_id = {p.identity: p for p in posts}
     in_scope = [p for p in posts if p.topic_match]
+    brief = build_brief(run, posts, bundle)
+    written = _two_up(summary, brief) or _brief(brief)
     body = "".join(
         [
             _header(run, posts, bundle),
             _volume_chart(in_scope),
-            _brief(build_brief(run, posts, bundle)),
+            written,
             _filter_bar(),
             _assessment(bundle),
             _indicators(bundle),
@@ -764,7 +833,11 @@ def render(run: Run, posts: list[Post], bundle: AnalysisBundle) -> str:
 
 
 def export_site(
-    run: Run, posts: list[Post], bundle: AnalysisBundle, out_dir: Path | str
+    run: Run,
+    posts: list[Post],
+    bundle: AnalysisBundle,
+    out_dir: Path | str,
+    summary: ModelSummary | None = None,
 ) -> Path:
     """Write ``<out_dir>/index.html``. Refuses to overwrite an existing case."""
     target = Path(out_dir)
@@ -772,7 +845,7 @@ def export_site(
     if index.exists():
         raise FileExistsError(f"{index} already exists; a case file is never overwritten")
     target.mkdir(parents=True, exist_ok=True)
-    index.write_text(render(run, posts, bundle), encoding="utf-8")
+    index.write_text(render(run, posts, bundle, summary=summary), encoding="utf-8")
     return index
 
 

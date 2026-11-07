@@ -254,6 +254,23 @@ document for PDF. An existing case file is never overwritten.
 If you have no Vercel account, `vercel deploy dist/case --temporary` publishes a
 working link without logging in, and prints a claim URL to keep it.
 
+#### An optional model summary
+
+```bash
+export GEMINI_API_KEY=...            # free tier is enough
+.venv/bin/socmint export-site --run <run-id> --out dist/case --summary
+```
+
+This adds one model-written paragraph beside the deterministic brief's opening —
+side by side, not above it. The model condenses the findings; it is never asked
+to conclude. Before the text is used, every identifier in it is checked against
+the bundle, and a summary that names a value the evidence does not contain is
+dropped rather than published.
+
+The call happens at export time, so the file stays self-contained, the key never
+reaches a browser, and static hosting is unaffected. Without the flag or without
+a key the export is unchanged.
+
 ### Inspect stored runs
 
 ```bash
@@ -436,7 +453,7 @@ the sampled topics.
 
 **What is actually measured:**
 
-- 227 offline tests, 84% statement coverage.
+- 236 offline tests, 83% statement coverage.
 - Behavioural tests: coordination fires on repeated near-identical posting and
   does **not** fire on an organic breaking-news burst, on a generic shared link,
   on same-account reposts, or on undated posts.

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
@@ -113,6 +114,16 @@ def build_parser() -> argparse.ArgumentParser:
     site.add_argument("--run", required=True, dest="run_id")
     site.add_argument("--out", required=True, help="output directory")
     site.add_argument("--data-dir", default="data")
+    site.add_argument(
+        "--summary",
+        action="store_true",
+        help="add a model-written summary beside the brief (needs GEMINI_API_KEY)",
+    )
+    site.add_argument(
+        "--summary-model",
+        default=None,
+        help="model to use for --summary (default: the built-in default)",
+    )
 
     reanalyse = sub.add_parser(
         "reanalyse",
@@ -205,8 +216,33 @@ def main(argv: list[str] | None = None) -> int:
             if bundle is None:
                 print(f"run {args.run_id} has no analysis", file=sys.stderr)
                 return 2
+        summary = None
+        if args.summary:
+            from .summary import DEFAULT_MODEL, SummaryUnavailable, build_summary
+
+            key = os.environ.get("GEMINI_API_KEY", "").strip()
+            if not key:
+                # A missing key is not a reason to fail an export. The page is
+                # complete without the summary; say so and carry on.
+                print(
+                    "note: GEMINI_API_KEY is not set; exporting without a model summary",
+                    file=sys.stderr,
+                )
+            else:
+                try:
+                    summary = build_summary(
+                        run,
+                        bundle,
+                        post_count=len(posts),
+                        api_key=key,
+                        model=args.summary_model or DEFAULT_MODEL,
+                    )
+                    print(f"summary: {summary.provenance}")
+                except SummaryUnavailable as exc:
+                    print(f"note: no model summary ({exc})", file=sys.stderr)
+
         try:
-            index = export_site(run, posts, bundle, args.out)
+            index = export_site(run, posts, bundle, args.out, summary=summary)
         except FileExistsError as exc:
             print(str(exc), file=sys.stderr)
             return 2

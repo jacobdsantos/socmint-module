@@ -13,8 +13,9 @@ Binds to loopback only; this is not a hosted service.
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -56,8 +57,8 @@ CSS = """
   :root {
     --void: #050818; --navy: #070B22; --navy2: #0C1132; --navy3: #111845;
     --line: #1E2657; --line-hot: #2E3A7A;
-    --ink: #E6E9F5; --muted: #8A93BF; --dim: #5A6394;
-    --crimson: #E8234A; --crimson-soft: rgba(232,35,74,.12);
+    --ink: #E6E9F5; --muted: #8A93BF; --dim: #727CB0;
+    --crimson: #EC2C53; --crimson-soft: rgba(232,35,74,.12);
     --amber: #F2A33C; --mint: #35D6A4; --violet: #8B7CF6;
     --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
@@ -203,6 +204,14 @@ CSS = """
   .brief-p {
     color: #C9CFE6; font-size: 13.5px; line-height: 1.72;
     max-width: 74ch; margin: 0 0 12px 0;
+  }
+  /* Says which of the two panels a reader is looking at, and where it came from.
+     The container prefix is needed: Streamlit styles markdown paragraphs with a
+     more specific selector than a bare class. */
+  [data-testid="stMarkdownContainer"] .provenance {
+    color: var(--dim) !important; font-size: 10.5px !important;
+    font-family: var(--mono) !important; letter-spacing: 0.05em;
+    margin: -6px 0 14px 0;
   }
   .brief-ul { max-width: 74ch; margin: 2px 0 16px 0; padding-left: 17px; }
   .brief-ul li {
@@ -523,7 +532,77 @@ def _render_overview(run, posts, in_scope, bundle) -> None:
     if chart is not None:
         st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False})
 
-    _render_brief(build_brief(run, posts, bundle))
+    brief = build_brief(run, posts, bundle)
+    summary = _model_summary(run, bundle, len(posts))
+    if summary is None or not brief.sections:
+        _render_brief(brief)
+        return
+
+    # Two readings of the same findings, side by side and equally labelled. The
+    # model paragraph never replaces the deterministic one; it sits beside it.
+    st.markdown(
+        f'<p class="standfirst">{_esc(brief.standfirst)}</p>', unsafe_allow_html=True
+    )
+    left, right = st.columns(2)
+    with left, st.container(border=True):
+        st.markdown('<h3 class="brief-h">Model summary</h3>', unsafe_allow_html=True)
+        st.markdown(
+            f'<p class="provenance">{_esc(summary.provenance)} · condenses the findings below</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<p class="brief-p">{_esc(summary.text)}</p>', unsafe_allow_html=True
+        )
+    with right, st.container(border=True):
+        opening = brief.sections[0]
+        st.markdown(
+            f'<h3 class="brief-h">{_esc(opening.heading)}</h3>', unsafe_allow_html=True
+        )
+        st.markdown(
+            '<p class="provenance">Derived directly from the collected records</p>',
+            unsafe_allow_html=True,
+        )
+        for paragraph in opening.paragraphs:
+            st.markdown(
+                f'<p class="brief-p">{_esc(paragraph)}</p>', unsafe_allow_html=True
+            )
+
+    _render_brief(Brief(standfirst="", sections=brief.sections[1:]))
+
+
+@st.cache_data(show_spinner=False, ttl=None)
+def _cached_summary(run_id: str, post_count: int, model: str, _bundle) -> str | None:
+    """One call per run, not one per rerun. The leading underscore keeps the
+    bundle out of the cache key."""
+    from socmint.summary import SummaryUnavailable, build_summary
+
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        return None
+    run = get_store().load_run(run_id)
+    if run is None:
+        return None
+    try:
+        result = build_summary(run, _bundle, post_count=post_count, api_key=key, model=model)
+    except SummaryUnavailable:
+        return None
+    return f"{result.provenance}\x00{result.text}"
+
+
+def _model_summary(run, bundle, post_count):
+    """The summary if a key is configured, otherwise None. Never raises."""
+    from socmint.summary import DEFAULT_MODEL, ModelSummary
+
+    blob = _cached_summary(run.run_id, post_count, DEFAULT_MODEL, bundle)
+    if not blob:
+        return None
+    provenance, _, text = blob.partition("\x00")
+    model, _, stamp = provenance.partition(" · ")
+    try:
+        when = datetime.strptime(stamp, "%d %b %Y %H:%M UTC").replace(tzinfo=UTC)
+    except ValueError:
+        when = datetime.now(UTC)
+    return ModelSummary(text=text, model=model, generated_at=when)
 
 
 @st.cache_resource

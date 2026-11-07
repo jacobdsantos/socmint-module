@@ -315,3 +315,29 @@ touching a collector. Posts are untouched and analyst reviews are kept.
 Verified on the `binance hack` run: 0 occurrences of `post(s)` in the exported
 case file, 0 raw storage keys in rendered output, chart labels legible at 1440
 wide. 227 tests pass, 84% coverage, ruff clean.
+
+---
+
+## Optional model summary, beside the brief
+
+An LLM paragraph was the one thing this project deliberately did not have. It is
+now available, opt-in, and positioned so it cannot become the conclusion: the
+model summary and the brief's opening sit side by side in a two-column band,
+each labelled with where it came from, and the deterministic sections continue
+full width beneath. Below 1000px the band stacks.
+
+**It condenses, it does not conclude.** `summary.py` sends the findings as
+counts and labels — no post text, no account handles, no indicator values — and tells
+the model to add no fact, cause, motive or attribution. Output is checked
+against the bundle before use: an identifier, domain or hash the findings do not
+contain means the summary is dropped, not corrected.
+
+**Export-time, so hosting is unaffected.** `export-site --summary` generates the
+paragraph once and embeds it. The published file stays self-contained, the key
+never reaches a browser, and Cloudflare Pages or Vercel need no function or
+secret. No flag, no key, or a failed call all produce exactly the previous page.
+
+Verified: the band renders in both surfaces at 1440 (two columns) and 768
+(stacked); an invalid API key degrades to the deterministic brief with no error;
+the static file contains no fabricated identifier. 236 tests pass, 83% coverage,
+ruff clean.

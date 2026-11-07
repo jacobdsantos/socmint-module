@@ -545,3 +545,39 @@ Analyst reviews live in their own table rather than in the bundle, so they
 survive; the command says so when reviews exist rather than leaving it to be
 discovered. Source facts stay immutable, and the derived layer is rebuilt from
 them — which is the correct direction for a change to be able to flow.
+
+---
+
+## 21. The model summary sits beside the brief, not above it
+
+An LLM paragraph at the top of the page would become the conclusion by
+position, whatever its label says. A reader skims the first paragraph and
+treats the rest as support. That is exactly the hierarchy this case file is
+built to avoid: the findings are the argument, and no generated sentence should
+outrank them.
+
+**So the two are peers.** A two-column band at the top holds `Model summary` on
+the left and the brief's opening (`Situation`) on the right, each labelled with
+where it came from — the model name and timestamp on one side, "derived directly
+from the collected records" on the other. The remaining deterministic sections
+continue full width beneath. Below 1000px the band stacks, because side by side
+at tablet width squeezes prose to about 45 characters.
+
+**The model condenses; it does not conclude.** `summary.py` sends the findings
+as structured counts and labels — no post text, no account handles, no indicator
+values — and instructs the model to add no fact, cause, motive or attribution.
+The digest deliberately omits indicator values: they are enough to summarise as
+counts, and sending them would export private indicators to a third party.
+
+**Output is checked before it is used.** Every identifier in the generated text
+— narrative and group ids, domains, hashes — is matched against the bundle. A
+summary that names a value the evidence does not contain is a fabrication, and a
+fabricated case summary is worse than no summary, so it is dropped and the page
+renders the deterministic brief alone.
+
+**It runs at export time, not page load.** The text is generated once and
+embedded, so the published file stays self-contained, the API key never reaches
+a browser, and Cloudflare Pages or Vercel need no function, no secret and no
+runtime. No key, no flag, or a failed call all produce exactly the page that
+existed before this feature — which is the state the demo should be in if a
+quota runs out mid-presentation.
