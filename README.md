@@ -1,9 +1,9 @@
 # SOCMINT Module
 
-AI-native social threat intelligence for a topic and date range: multilingual
-narrative candidates with threat framing, explainable coordination candidates,
-extracted and defanged indicators, impersonation signals, Admiralty-graded
-evidence, and a case assessment a human can defend.
+Social threat intelligence for a topic and date range: multilingual narrative
+candidates with threat framing, explainable coordination candidates, extracted
+and defanged indicators, impersonation signals, Admiralty-graded evidence, and a
+case assessment a human can defend.
 
 Built for a five-day assessment in a **cyber threat intelligence** context — the
 three priority cases are conflict disinformation, impersonation/deepfakes, and
@@ -243,7 +243,7 @@ wrangler pages deploy dist/case          # Cloudflare Pages
 vercel deploy dist/case --prod           # Vercel
 ```
 
-`index.html` is ~76 KB: CSS and JS inlined, no fonts, no CDN, no network at view
+`index.html` is ~200 KB: CSS and JS inlined, no fonts, no CDN, no network at view
 time. It carries the whole case — assessment, impersonation signals, indicators
 with roles, narratives, coordination, claim review, spread, coverage, and the
 evidence table as an appendix — plus a filter box that searches values, claims
